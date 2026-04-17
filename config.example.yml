@@ -36,6 +36,13 @@ review:
     - package-lock.json
     - yarn.lock
 
+# GitHub へのフィードバック (GITHUB_TOKEN が必要)
+github:
+  # PR にレビューコメントとして投稿する
+  prReviewComment: true
+  # push レビューで Critical/High が見つかった場合 Issue を作成する
+  pushIssueOnSevere: true
+
 # Discord への投稿フォーマット
 discord:
   # 1 メッセージの最大文字数 (Discord の上限は 2000)

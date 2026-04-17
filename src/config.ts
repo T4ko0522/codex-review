@@ -39,6 +39,16 @@ const ConfigSchema = z.object({
       excludePaths: [],
     }),
 
+  github: z
+    .object({
+      prReviewComment: z.boolean().default(true),
+      pushIssueOnSevere: z.boolean().default(true),
+    })
+    .default({
+      prReviewComment: true,
+      pushIssueOnSevere: true,
+    }),
+
   discord: z
     .object({
       chunkSize: z.number().int().positive().max(2000).default(1900),
