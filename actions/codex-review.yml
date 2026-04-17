@@ -41,8 +41,13 @@ jobs:
             echo "CODEX_REVIEW_URL / CODEX_REVIEW_SECRET が未設定です" >&2
             exit 1
           fi
+          # pull_request_target → pull_request に正規化 (サーバー側 schema との整合)
+          EVENT="$EVENT_NAME"
+          if [ "$EVENT" = "pull_request_target" ]; then
+            EVENT="pull_request"
+          fi
           BODY=$(jq -cn \
-            --arg event "$EVENT_NAME" \
+            --arg event "$EVENT" \
             --arg repo "$REPO" \
             --arg sender "${SENDER:-}" \
             --arg deliveredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
