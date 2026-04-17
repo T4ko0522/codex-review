@@ -49,7 +49,8 @@ async function main() {
       try {
         const thread = await bot.publish(job, result.markdown, result.workspacePath);
         if (config.discord.enableThreadChat && result.workspacePath) {
-          threadContext.set(thread.id, { job, workspacePath: result.workspacePath, createdAt: Date.now() });
+          const now = Date.now();
+          threadContext.set(thread.id, { job, workspacePath: result.workspacePath, createdAt: now, lastActivityAt: now });
           kept = true;
         }
       } finally {
@@ -71,7 +72,7 @@ async function main() {
   const sweepTimer = setInterval(() => {
     const now = Date.now();
     for (const [id, ctx] of threadContext) {
-      if (now - ctx.createdAt > ttlMs && ctx.workspacePath) {
+      if (now - ctx.lastActivityAt > ttlMs && ctx.workspacePath) {
         try {
           rmSync(ctx.workspacePath, { recursive: true, force: true });
           logger.info({ threadId: id, age: Math.round((now - ctx.createdAt) / 60_000) }, "stale workspace cleaned");

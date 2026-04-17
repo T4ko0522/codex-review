@@ -73,7 +73,8 @@ export class DiscordBot {
       content: markdown,
       createdAt: Date.now(),
     });
-    this.deps.threadContext.set(thread.id, { job, workspacePath, createdAt: Date.now() });
+    const now = Date.now();
+    this.deps.threadContext.set(thread.id, { job, workspacePath, createdAt: now, lastActivityAt: now });
     return thread;
   }
 
@@ -102,6 +103,9 @@ export class DiscordBot {
     await thread.sendTyping().catch(() => {});
 
     store.addMessage({ threadId: thread.id, role: "user", content, createdAt: Date.now() });
+
+    // workspace TTL を延長
+    if (ctx) ctx.lastActivityAt = Date.now();
 
     const history = store.listMessages(thread.id);
     const prompt = buildFollowUpPrompt(record.job, history.slice(-20), content);

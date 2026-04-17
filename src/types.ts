@@ -58,4 +58,6 @@ export interface ThreadContext {
   job: ReviewJob;
   workspacePath?: string;
   createdAt: number;
+  /** 最後にスレッド内で活動があった時刻 (TTL 判定に使用) */
+  lastActivityAt: number;
 }
