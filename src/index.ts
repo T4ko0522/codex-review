@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { loadConfig } from "./config.ts";
 import { loadEnv } from "./env.ts";
 import { createLogger } from "./logger.ts";
@@ -30,11 +30,16 @@ async function main() {
     handle: async (job) => {
       logger.info({ repo: job.repo, kind: job.kind, number: job.number }, "review starting");
       const result = await runReview(job, { env, config, logger });
-      const thread = await bot.publish(job, result.markdown, result.workspacePath);
-      // 対話用にワークスペースを保持。アーカイブ時にクリーンアップは別途仕組みが必要。
-      // まずはスレッド context に保持し、プロセス再起動時は捨てる割り切り。
-      threadContext.set(thread.id, { job, workspacePath: result.workspacePath });
-      if (!config.discord.enableThreadChat) result.cleanup?.();
+      let kept = false;
+      try {
+        const thread = await bot.publish(job, result.markdown, result.workspacePath);
+        if (config.discord.enableThreadChat && result.workspacePath) {
+          threadContext.set(thread.id, { job, workspacePath: result.workspacePath });
+          kept = true;
+        }
+      } finally {
+        if (!kept) result.cleanup?.();
+      }
     },
   });
 
@@ -51,6 +56,17 @@ async function main() {
     await queue.drain();
     await bot.stop();
     store.close();
+    // 残存 workspace を一括クリーンアップ
+    for (const [, ctx] of threadContext) {
+      if (ctx.workspacePath) {
+        try {
+          rmSync(ctx.workspacePath, { recursive: true, force: true });
+        } catch {
+          /* best effort */
+        }
+      }
+    }
+    threadContext.clear();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
