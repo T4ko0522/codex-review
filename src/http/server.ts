@@ -17,6 +17,11 @@ const IncomingSchema = z.object({
   payload: z.record(z.any()),
 });
 
+// raw body をリクエストボディに添える際の衝突しないキー。
+// 文字列キーだとクライアント側ペイロードとぶつかり得るため Symbol を使う。
+const RAW_BODY = Symbol("rawBody");
+type WithRaw = { [RAW_BODY]?: Buffer };
+
 export interface StartServerDeps {
   env: Env;
   config: AppConfig;
@@ -46,7 +51,7 @@ export async function startServer({
     try {
       const buf = body as Buffer;
       const json = JSON.parse(buf.toString("utf8"));
-      (json as { __raw?: Buffer }).__raw = buf;
+      (json as WithRaw)[RAW_BODY] = buf;
       done(null, json);
     } catch (err) {
       done(err as Error, undefined);
@@ -58,8 +63,8 @@ export async function startServer({
   app.post("/webhook", async (req, reply) => {
     const signature = req.headers["x-codex-review-signature"];
     const sig = Array.isArray(signature) ? signature[0] : signature;
-    const body = req.body as (IncomingWebhook & { __raw?: Buffer }) | undefined;
-    const raw = body?.__raw;
+    const body = req.body as (IncomingWebhook & WithRaw) | undefined;
+    const raw = body?.[RAW_BODY];
     if (!raw) {
       return reply.code(400).send({ ok: false, error: "empty body" });
     }
