@@ -9,10 +9,10 @@ const ConfigSchema = z.object({
         .object({
           enabled: z.boolean().default(true),
           // "all": 全 push を自動レビュー
-          // "protected-only": Protected Branch への push だけ自動レビュー
-          mode: z.enum(["all", "protected-only"]).default("protected-only"),
+          // "default-only": デフォルトブランチへの push だけ自動レビュー
+          mode: z.enum(["all", "default-only"]).default("default-only"),
         })
-        .default({ enabled: true, mode: "protected-only" }),
+        .default({ enabled: true, mode: "default-only" }),
       pull_request: z
         .object({
           enabled: z.boolean().default(true),
@@ -29,7 +29,7 @@ const ConfigSchema = z.object({
         .default({ enabled: true, autoReviewOn: [] }),
     })
     .default({
-      push: { enabled: true, mode: "protected-only" },
+      push: { enabled: true, mode: "default-only" },
       pull_request: { enabled: true, autoReviewOn: ["opened"] },
       issues: { enabled: true, autoReviewOn: [] },
     }),

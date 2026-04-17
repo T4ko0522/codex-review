@@ -6,8 +6,8 @@ events:
   push:
     enabled: true
     # "all": 全 push を自動レビュー
-    # "protected-only": Protected Branch への push だけ自動レビュー (推奨)
-    mode: protected-only
+    # "default-only": デフォルトブランチへの push だけ自動レビュー (推奨)
+    mode: default-only
   pull_request:
     enabled: true
     # ここに含まれる PR action だけ自動レビュー。他は mention 待ち

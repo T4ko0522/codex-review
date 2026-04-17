@@ -8,7 +8,7 @@ import type { Logger } from "../logger.ts";
 import { buildDedupKey } from "../review/dedup.ts";
 import type { EventKind, IncomingWebhook, ReviewJob } from "../types.ts";
 import { buildJobFromPayload } from "../github/events.ts";
-import { isBranchProtected } from "../github/client.ts";
+import { getDefaultBranch } from "../github/client.ts";
 import { verifySignature } from "./verify.ts";
 
 const IncomingSchema = z.object({
@@ -30,8 +30,8 @@ export interface StartServerDeps {
   logger: Logger;
   enqueue: (job: ReviewJob) => void;
   /**
-   * Protected Branch 判定や mention 由来 PR の sha 補完に使う。
-   * 未指定の場合、protected-only モードは常にスキップ扱い、mention 経由 PR はレビュー不可。
+   * デフォルトブランチ判定や mention 由来 PR の sha 補完に使う。
+   * 未指定の場合、default-only モードは常にスキップ扱い、mention 経由 PR はレビュー不可。
    */
   octokit?: Octokit;
   /**
@@ -118,21 +118,21 @@ export async function startServer({
       return reply.code(202).send({ ok: true, skipped: "branch-filtered" });
     }
 
-    // push: protected-only モードなら GitHub API で保護状態を確認
-    if (job.kind === "push" && config.events.push.mode === "protected-only") {
+    // push: default-only モードならデフォルトブランチかを確認
+    if (job.kind === "push" && config.events.push.mode === "default-only") {
       const branch = (job.ref ?? "").replace(/^refs\/heads\//, "");
       const [owner, repoName] = job.repo.split("/");
       if (!octokit || !owner || !repoName || !branch) {
         logger.info(
           { repo: job.repo, branch, hasOctokit: Boolean(octokit) },
-          "cannot check branch protection, skip",
+          "cannot check default branch, skip",
         );
-        return reply.code(202).send({ ok: true, skipped: "non-protected" });
+        return reply.code(202).send({ ok: true, skipped: "non-default" });
       }
-      const ok = await isBranchProtected(octokit, owner, repoName, branch, logger);
-      if (!ok) {
-        logger.info({ repo: job.repo, branch }, "non-protected branch, skip");
-        return reply.code(202).send({ ok: true, skipped: "non-protected" });
+      const defaultBranch = await getDefaultBranch(octokit, owner, repoName, logger);
+      if (branch !== defaultBranch) {
+        logger.info({ repo: job.repo, branch, defaultBranch }, "non-default branch, skip");
+        return reply.code(202).send({ ok: true, skipped: "non-default" });
       }
     }
 

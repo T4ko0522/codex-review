@@ -47,34 +47,26 @@ export async function createGitHubClient(env: Env, logger: Logger): Promise<GitH
 }
 
 /**
- * 指定ブランチが Protected Branch かを問い合わせる。
- * - 未保護 (404) なら false
- * - 権限不足等の他エラーも「保護されてるとは確定できない」として false を返し、
- *   ログに警告を出す。ユーザーが意図的に protected-only モードを使う時は
- *   Administration: Read 権限を App に付与している前提。
+ * リポジトリのデフォルトブランチ名を取得する。
+ * API エラー時は undefined を返しログに警告を出す。
  */
-export async function isBranchProtected(
+export async function getDefaultBranch(
   octokit: Octokit,
   owner: string,
   repo: string,
-  branch: string,
   logger?: Logger,
-): Promise<boolean> {
+): Promise<string | undefined> {
   try {
-    await octokit.rest.repos.getBranchProtection({ owner, repo, branch });
-    return true;
+    const { data } = await octokit.rest.repos.get({ owner, repo });
+    return data.default_branch;
   } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status === 404) return false;
     logger?.warn(
       {
         repo: `${owner}/${repo}`,
-        branch,
-        status,
         err: (err as Error).message,
       },
-      "branch protection check failed, treating as not protected",
+      "failed to fetch default branch",
     );
-    return false;
+    return undefined;
   }
 }

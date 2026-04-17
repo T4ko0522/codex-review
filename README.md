@@ -33,14 +33,14 @@ GitHub の push / pull_request / issues / issue_comment を契機に **Codex CLI
 
 3 つのサブキーそれぞれに `enabled` と発火制御オプションを持ちます。
 
-| キー                               | デフォルト       | 説明                                                                      |
-| ---------------------------------- | ---------------- | ------------------------------------------------------------------------- |
-| `events.push.enabled`              | `true`           | push イベントを処理する                                                   |
-| `events.push.mode`                 | `protected-only` | `all` = 全 push を自動レビュー / `protected-only` = Protected Branch のみ |
-| `events.pull_request.enabled`      | `true`           | PR イベントを処理する                                                     |
-| `events.pull_request.autoReviewOn` | `["opened"]`     | 自動レビューする action 一覧。含まれない action は mention 待ち           |
-| `events.issues.enabled`            | `true`           | Issue イベントを処理する                                                  |
-| `events.issues.autoReviewOn`       | `[]`             | 空なら全て mention 待ち。`opened` などを入れると自動起動                  |
+| キー                               | デフォルト     | 説明                                                                     |
+| ---------------------------------- | -------------- | ------------------------------------------------------------------------ |
+| `events.push.enabled`              | `true`         | push イベントを処理する                                                  |
+| `events.push.mode`                 | `default-only` | `all` = 全 push を自動レビュー / `default-only` = デフォルトブランチのみ |
+| `events.pull_request.enabled`      | `true`         | PR イベントを処理する                                                    |
+| `events.pull_request.autoReviewOn` | `["opened"]`   | 自動レビューする action 一覧。含まれない action は mention 待ち          |
+| `events.issues.enabled`            | `true`         | Issue イベントを処理する                                                 |
+| `events.issues.autoReviewOn`       | `[]`           | 空なら全て mention 待ち。`opened` などを入れると自動起動                 |
 
 ### mention
 

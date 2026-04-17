@@ -35,7 +35,7 @@ const baseEnv: Env = {
 };
 
 // テストでは mode:"all" と全 PR/issue action 許可でデフォルトフローを通りやすくする。
-// protected-only や autoReviewOn の個別振る舞いは専用テストで検証する。
+// default-only や autoReviewOn の個別振る舞いは専用テストで検証する。
 const baseConfig: AppConfig = {
   events: {
     push: { enabled: true, mode: "all" },
@@ -273,22 +273,16 @@ describe("HTTP server", () => {
   });
 });
 
-describe("HTTP server - protected-only push", () => {
-  it("skips push to non-protected branch", async () => {
+describe("HTTP server - default-only push", () => {
+  it("skips push to non-default branch", async () => {
     await app.close();
-    const getBranchProtection = vi
-      .fn()
-      .mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 }));
-    const fakeOctokit = {
-      rest: {
-        repos: { getBranchProtection },
-      },
-    } as any;
+    const get = vi.fn().mockResolvedValue({ data: { default_branch: "develop" } });
+    const fakeOctokit = { rest: { repos: { get } } } as any;
     app = await startServer({
       env: baseEnv,
       config: {
         ...baseConfig,
-        events: { ...baseConfig.events, push: { enabled: true, mode: "protected-only" } },
+        events: { ...baseConfig.events, push: { enabled: true, mode: "default-only" } },
       },
       logger,
       octokit: fakeOctokit,
@@ -305,22 +299,20 @@ describe("HTTP server - protected-only push", () => {
       body,
     });
     expect(res.statusCode).toBe(202);
-    expect(res.json().skipped).toBe("non-protected");
+    expect(res.json().skipped).toBe("non-default");
     expect(enqueued).toHaveLength(0);
-    expect(getBranchProtection).toHaveBeenCalledWith(
-      expect.objectContaining({ owner: "acme", repo: "app", branch: "main" }),
-    );
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ owner: "acme", repo: "app" }));
   });
 
-  it("enqueues push to protected branch", async () => {
+  it("enqueues push to default branch", async () => {
     await app.close();
-    const getBranchProtection = vi.fn().mockResolvedValue({ data: {} });
-    const fakeOctokit = { rest: { repos: { getBranchProtection } } } as any;
+    const get = vi.fn().mockResolvedValue({ data: { default_branch: "main" } });
+    const fakeOctokit = { rest: { repos: { get } } } as any;
     app = await startServer({
       env: baseEnv,
       config: {
         ...baseConfig,
-        events: { ...baseConfig.events, push: { enabled: true, mode: "protected-only" } },
+        events: { ...baseConfig.events, push: { enabled: true, mode: "default-only" } },
       },
       logger,
       octokit: fakeOctokit,
@@ -340,13 +332,13 @@ describe("HTTP server - protected-only push", () => {
     expect(enqueued).toHaveLength(1);
   });
 
-  it("skips when octokit is not provided under protected-only", async () => {
+  it("skips when octokit is not provided under default-only", async () => {
     await app.close();
     app = await startServer({
       env: baseEnv,
       config: {
         ...baseConfig,
-        events: { ...baseConfig.events, push: { enabled: true, mode: "protected-only" } },
+        events: { ...baseConfig.events, push: { enabled: true, mode: "default-only" } },
       },
       logger,
       enqueue: (job) => enqueued.push(job),
@@ -361,7 +353,7 @@ describe("HTTP server - protected-only push", () => {
       },
       body,
     });
-    expect(res.json().skipped).toBe("non-protected");
+    expect(res.json().skipped).toBe("non-default");
   });
 });
 

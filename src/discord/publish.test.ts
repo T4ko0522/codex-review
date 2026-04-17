@@ -7,7 +7,7 @@ import { assertTextChannel, chunkMarkdown, publishReview, sendChunks } from "./p
 
 const config: AppConfig = {
   events: {
-    push: { enabled: true, mode: "protected-only" },
+    push: { enabled: true, mode: "default-only" },
     pull_request: { enabled: true, autoReviewOn: ["opened"] },
     issues: { enabled: true, autoReviewOn: [] },
   },

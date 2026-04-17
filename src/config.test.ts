@@ -57,7 +57,7 @@ describe("loadConfig", () => {
   it("returns defaults when file does not exist", () => {
     const cfg = loadConfig(join(tmpDir, "nonexistent.yml"));
     expect(cfg.events.push.enabled).toBe(true);
-    expect(cfg.events.push.mode).toBe("protected-only");
+    expect(cfg.events.push.mode).toBe("default-only");
     expect(cfg.events.pull_request.enabled).toBe(true);
     expect(cfg.events.pull_request.autoReviewOn).toEqual(["opened"]);
     expect(cfg.events.issues.enabled).toBe(true);
@@ -98,7 +98,7 @@ describe("loadConfig", () => {
     const cfg = loadConfig(file);
     expect(cfg.discord.chunkSize).toBe(1500);
     expect(cfg.events.push.enabled).toBe(true);
-    expect(cfg.events.push.mode).toBe("protected-only");
+    expect(cfg.events.push.mode).toBe("default-only");
     expect(cfg.filters.repositories).toEqual([]);
   });
 
@@ -107,7 +107,7 @@ describe("loadConfig", () => {
     writeFileSync(file, "events:\n  push:\n    enabled: false\n");
     const cfg = loadConfig(file);
     expect(cfg.events.push.enabled).toBe(false);
-    expect(cfg.events.push.mode).toBe("protected-only");
+    expect(cfg.events.push.mode).toBe("default-only");
   });
 
   it("rejects invalid push.mode", () => {
