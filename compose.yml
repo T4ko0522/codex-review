@@ -1,0 +1,35 @@
+services:
+  codex-review:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: codex-review:latest
+    container_name: codex-review
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${HTTP_PORT:-3000}:3000"
+    volumes:
+      # ユーザー設定を config.yml に置いて bind mount
+      - ./config.yml:/app/config.yml:ro
+      # SQLite / clone 先を永続化
+      - codex-data:/app/data
+      - codex-workspaces:/app/workspaces
+      # ホスト側の codex 認証を共有 (~/.codex を読み込み)
+      - ${CODEX_AUTH_DIR:-~/.codex}:/root/.codex
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  codex-data:
+  codex-workspaces:
