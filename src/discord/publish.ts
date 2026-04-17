@@ -80,8 +80,8 @@ export function chunkMarkdown(input: string, size: number): string[] {
     let chunk = input.slice(offset, offset + cut);
     offset += cut;
 
-    // コードフェンスの開閉を揃える
-    const fences = chunk.match(/```[^\n]*/g) ?? [];
+    // コードフェンスの開閉を揃える (行頭の ``` のみ対象。インライン言及を誤検出しない)
+    const fences = chunk.match(/^```[^\n]*/gm) ?? [];
     let localOpen: string | null = openFence;
     for (const f of fences) {
       if (localOpen) localOpen = null;

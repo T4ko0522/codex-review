@@ -62,6 +62,17 @@ describe("chunkMarkdown", () => {
       expect(fenceCount % 2).toBe(0);
     }
   });
+
+  it("does not treat inline ``` mentions as fence openings", () => {
+    // 行中の ``` 言及 (例: 「```diff は不要」) は fence として扱わない
+    const padding = "word ".repeat(80);
+    const md = `${padding}書式は \`\`\`ts のように使います。${padding}\n${padding}\n末尾。`;
+    const chunks = chunkMarkdown(md, 200);
+    // どのチャンクも fence を挿入されない (インライン言及は本物のフェンスではない)
+    for (const c of chunks) {
+      expect(c.startsWith("```")).toBe(false);
+    }
+  });
 });
 
 describe("assertTextChannel", () => {
