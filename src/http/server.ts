@@ -4,6 +4,7 @@ import type { AppConfig } from "../config.ts";
 import { branchAllowed, repoAllowed } from "../config.ts";
 import type { Env } from "../env.ts";
 import type { Logger } from "../logger.ts";
+import { buildDedupKey } from "../review/dedup.ts";
 import type { EventKind, IncomingWebhook, ReviewJob } from "../types.ts";
 import { buildJobFromPayload } from "../github/events.ts";
 import { verifySignature } from "./verify.ts";
@@ -21,9 +22,20 @@ export interface StartServerDeps {
   config: AppConfig;
   logger: Logger;
   enqueue: (job: ReviewJob) => void;
+  /**
+   * 重複レビュー防止: 同一キーで再送された場合は false を返してスキップさせる。
+   * 未指定なら dedup を行わない。
+   */
+  tryRegisterReview?: (key: string) => boolean;
 }
 
-export async function startServer({ env, config, logger, enqueue }: StartServerDeps) {
+export async function startServer({
+  env,
+  config,
+  logger,
+  enqueue,
+  tryRegisterReview,
+}: StartServerDeps) {
   const app = Fastify({
     logger: false,
     bodyLimit: 10 * 1024 * 1024, // 10MB
@@ -89,6 +101,17 @@ export async function startServer({ env, config, logger, enqueue }: StartServerD
     if (job.kind === "pull_request" && config.filters.skipDraftPullRequests && job.isDraft) {
       logger.info({ pr: job.number }, "draft PR, skip");
       return reply.code(202).send({ ok: true, skipped: "draft-pr" });
+    }
+
+    if (tryRegisterReview) {
+      const dedupKey = buildDedupKey(job);
+      if (dedupKey && !tryRegisterReview(dedupKey)) {
+        logger.info(
+          { kind: job.kind, repo: job.repo, number: job.number, dedupKey },
+          "duplicate review, skip",
+        );
+        return reply.code(202).send({ ok: true, skipped: "duplicate" });
+      }
     }
 
     enqueue(job);

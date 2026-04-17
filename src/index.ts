@@ -8,6 +8,7 @@ import { createGitHubClient } from "./github/client.ts";
 import { createPushIssue, postPrReview } from "./github/feedback.ts";
 import { startServer } from "./http/server.ts";
 import { JobQueue } from "./queue/queue.ts";
+import { buildDedupKey } from "./review/dedup.ts";
 import { runReview } from "./review/runner.ts";
 import { Store } from "./store/db.ts";
 import type { ThreadContext } from "./types.ts";
@@ -33,23 +34,30 @@ async function main() {
     concurrency: 1,
     handle: async (job) => {
       logger.info({ repo: job.repo, kind: job.kind, number: job.number }, "review starting");
-      const result = await runReview(job, { env, config, logger, githubToken: gh.token });
-
-      // GitHub フィードバック (best-effort、エラーは内部で吸収)
-      if (config.github.prReviewComment && job.kind === "pull_request") {
-        await postPrReview(gh.octokit, job, result.markdown, logger);
-      }
-      if (config.github.pushIssueOnSevere && job.kind === "push") {
-        await createPushIssue(gh.octokit, job, result.markdown, logger);
-      }
-
-      // Discord 投稿 (既存フロー)
-      let kept = false;
+      const dedupKey = buildDedupKey(job);
       try {
-        await bot.publish(job, result.markdown, result.workspacePath);
-        kept = config.discord.enableThreadChat && Boolean(result.workspacePath);
-      } finally {
-        if (!kept) result.cleanup?.();
+        const result = await runReview(job, { env, config, logger, githubToken: gh.token });
+
+        // GitHub フィードバック (best-effort、エラーは内部で吸収)
+        if (config.github.prReviewComment && job.kind === "pull_request") {
+          await postPrReview(gh.octokit, job, result.markdown, logger);
+        }
+        if (config.github.pushIssueOnSevere && job.kind === "push") {
+          await createPushIssue(gh.octokit, job, result.markdown, logger);
+        }
+
+        // Discord 投稿 (既存フロー)
+        let kept = false;
+        try {
+          await bot.publish(job, result.markdown, result.workspacePath);
+          kept = config.discord.enableThreadChat && Boolean(result.workspacePath);
+        } finally {
+          if (!kept) result.cleanup?.();
+        }
+      } catch (err) {
+        // 失敗時は dedup キーを解除して再送での再試行を許可する。
+        if (dedupKey) store.unregisterReview(dedupKey);
+        throw err;
       }
     },
   });
@@ -59,6 +67,7 @@ async function main() {
     config,
     logger,
     enqueue: (job) => queue.enqueue(job),
+    tryRegisterReview: (key) => store.tryRegisterReview(key),
   });
 
   // workspace TTL: threadAutoArchiveMinutes を TTL として再利用し、定期スイープで回収

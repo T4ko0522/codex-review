@@ -10,6 +10,9 @@ export class Store {
   private stmtAddMessage!: Database.Statement;
   private stmtListMessages!: Database.Statement;
   private stmtListRecentMessages!: Database.Statement;
+  private stmtTryRegisterReview!: Database.Statement;
+  private stmtUnregisterReview!: Database.Statement;
+  private stmtHasReview!: Database.Statement;
 
   constructor(dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
@@ -38,6 +41,10 @@ export class Store {
         FOREIGN KEY (thread_id) REFERENCES threads(thread_id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id, id);
+      CREATE TABLE IF NOT EXISTS review_history (
+        dedup_key TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+      );
     `);
   }
 
@@ -57,10 +64,22 @@ export class Store {
     this.stmtListRecentMessages = this.db.prepare(
       "SELECT * FROM (SELECT thread_id as threadId, role, content, created_at as createdAt FROM messages WHERE thread_id = ? ORDER BY id DESC LIMIT ?) ORDER BY createdAt ASC",
     );
+    this.stmtTryRegisterReview = this.db.prepare(
+      "INSERT OR IGNORE INTO review_history (dedup_key, created_at) VALUES (?, ?)",
+    );
+    this.stmtUnregisterReview = this.db.prepare("DELETE FROM review_history WHERE dedup_key = ?");
+    this.stmtHasReview = this.db.prepare("SELECT 1 FROM review_history WHERE dedup_key = ?");
   }
 
   insertThread(t: ThreadRecord): void {
-    this.stmtInsertThread.run(t.threadId, t.repo, t.sha ?? null, t.kind, t.number ?? null, t.createdAt);
+    this.stmtInsertThread.run(
+      t.threadId,
+      t.repo,
+      t.sha ?? null,
+      t.kind,
+      t.number ?? null,
+      t.createdAt,
+    );
   }
 
   getThread(threadId: string): ThreadRecord | null {
@@ -77,6 +96,25 @@ export class Store {
 
   listRecentMessages(threadId: string, limit: number): MessageRecord[] {
     return this.stmtListRecentMessages.all(threadId, limit) as MessageRecord[];
+  }
+
+  /**
+   * 重複レビュー防止用のキーを原子的に登録する。
+   * 新規登録できれば true、既に存在すれば (= 重複) false。
+   */
+  tryRegisterReview(dedupKey: string, now: number = Date.now()): boolean {
+    const info = this.stmtTryRegisterReview.run(dedupKey, now);
+    return info.changes > 0;
+  }
+
+  /** 登録済みキーを削除する (レビュー失敗時の再試行用)。 */
+  unregisterReview(dedupKey: string): void {
+    this.stmtUnregisterReview.run(dedupKey);
+  }
+
+  /** 既にそのキーで登録されているかを確認する。 */
+  hasReview(dedupKey: string): boolean {
+    return this.stmtHasReview.get(dedupKey) !== undefined;
   }
 
   close(): void {
