@@ -278,7 +278,10 @@ describe("buildJobFromPayload - issue_comment", () => {
         sender: "bob",
         payload: {
           ...prCommentPayload,
-          comment: { ...prCommentPayload.comment, body: "> @CodexRabbit[bot] said something\nI agree" },
+          comment: {
+            ...prCommentPayload.comment,
+            body: "> @CodexRabbit[bot] said something\nI agree",
+          },
         },
       },
       { mentionTriggers: ["@CodexRabbit[bot]"] },
