@@ -5,8 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { branchAllowed, loadConfig, repoAllowed } from "./config.ts";
 
 let tmpDir: string;
-beforeEach(() => { tmpDir = mkdtempSync(join(tmpdir(), "cfg-test-")); });
-afterEach(() => { rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => {
+  tmpDir = mkdtempSync(join(tmpdir(), "cfg-test-"));
+});
+afterEach(() => {
+  rmSync(tmpDir, { recursive: true, force: true });
+});
 
 describe("repoAllowed", () => {
   it("allows all when list is empty", () => {

@@ -70,7 +70,9 @@ describe("assertTextChannel", () => {
   });
 
   it("rejects null", () => {
-    expect(() => assertTextChannel(null)).toThrow("DISCORD_CHANNEL_ID must point to a guild text channel");
+    expect(() => assertTextChannel(null)).toThrow(
+      "DISCORD_CHANNEL_ID must point to a guild text channel",
+    );
   });
 
   it("rejects DM channel type", () => {

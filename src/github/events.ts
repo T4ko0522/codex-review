@@ -39,9 +39,7 @@ export function buildJobFromPayload(input: IncomingWebhook): ReviewJob | null {
     // fork PR: head リポジトリが base と異なる場合、head 側の URL を保持
     const headRepoFullName = pr.head?.repo?.full_name;
     const isFork = headRepoFullName && headRepoFullName !== repository;
-    const headRepoUrl = isFork
-      ? `https://github.com/${headRepoFullName}`
-      : undefined;
+    const headRepoUrl = isFork ? `https://github.com/${headRepoFullName}` : undefined;
 
     return {
       kind: "pull_request",
