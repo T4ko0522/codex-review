@@ -5,7 +5,13 @@ import type { ReviewJob } from "../types.ts";
 import { splitArgs } from "../env.ts";
 import { runCodex } from "./codex.ts";
 import { buildReviewPrompt } from "./prompt.ts";
-import { createIsolatedWorkspace, filterDiff, getDiff, prepareWorkspace } from "./workspace.ts";
+import {
+  cloneRepoAtDefaultBranch,
+  createIsolatedWorkspace,
+  filterDiff,
+  getDiff,
+  prepareWorkspace,
+} from "./workspace.ts";
 
 export interface ReviewResult {
   markdown: string;
@@ -30,9 +36,10 @@ export async function runReview(job: ReviewJob, deps: RunReviewDeps): Promise<Re
   const { env, config, logger, githubToken } = deps;
   const extraArgs = splitArgs(env.CODEX_EXTRA_ARGS);
 
-  // issue は clone 不要
+  // issue: デフォルトブランチを clone して Codex に実ファイルを参照させる。
+  // clone 失敗時 (ネットワーク不達 / 権限不足など) は空の isolated workspace にフォールバック。
   if (job.kind === "issues") {
-    const ws = createIsolatedWorkspace(env.WORKSPACES_DIR, logger);
+    const ws = await prepareIssueWorkspace(deps, job);
     try {
       const prompt = buildReviewPrompt(job, "");
       const markdown = await runCodex({
@@ -90,6 +97,26 @@ export async function runReview(job: ReviewJob, deps: RunReviewDeps): Promise<Re
   } catch (err) {
     ws.cleanup();
     throw err;
+  }
+}
+
+async function prepareIssueWorkspace(deps: RunReviewDeps, job: ReviewJob) {
+  const { env, config, logger, githubToken } = deps;
+  try {
+    return await cloneRepoAtDefaultBranch({
+      workspacesDir: env.WORKSPACES_DIR,
+      repo: job.repo,
+      repoUrl: job.repoUrl,
+      depth: config.review.cloneDepth,
+      githubToken,
+      logger,
+    });
+  } catch (err) {
+    logger.warn(
+      { repo: job.repo, err: (err as Error).message },
+      "issue repo clone failed, falling back to empty workspace",
+    );
+    return createIsolatedWorkspace(env.WORKSPACES_DIR, logger);
   }
 }
 

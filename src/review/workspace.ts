@@ -55,6 +55,47 @@ export function getFollowUpWorkspace(
   return createIsolatedWorkspace(workspacesDir, logger);
 }
 
+export interface CloneDefaultBranchArgs {
+  workspacesDir: string;
+  repo: string; // owner/name
+  repoUrl: string;
+  depth: number;
+  githubToken?: string;
+  logger: Logger;
+}
+
+/**
+ * リポジトリのデフォルトブランチを shallow clone して workspace を作成する。
+ * Issue レビューや follow-up で Codex に実ファイルを参照させるために使用する。
+ */
+export async function cloneRepoAtDefaultBranch(args: CloneDefaultBranchArgs): Promise<Workspace> {
+  const { workspacesDir, repo, repoUrl, depth, githubToken, logger } = args;
+  assertRepo(repo);
+  mkdirSync(workspacesDir, { recursive: true });
+  const dir = join(workspacesDir, `${repo.replaceAll("/", "__")}-default-${Date.now()}`);
+
+  const authEnv = gitAuthEnv(githubToken);
+  const cloneArgs = ["clone", "--quiet", "--filter=blob:none"];
+  if (depth > 0) cloneArgs.push(`--depth=${depth}`);
+  cloneArgs.push(repoUrl, dir);
+
+  logger.debug({ dir, depth, repo }, "git clone (default branch)");
+  try {
+    await execa("git", cloneArgs, {
+      stdio: "pipe",
+      env: { ...process.env, ...authEnv },
+    });
+  } catch (err) {
+    cleanupWorkspace(dir, logger);
+    throw err;
+  }
+
+  return {
+    path: dir,
+    cleanup: () => cleanupWorkspace(dir, logger),
+  };
+}
+
 /**
  * トークンを URL やコマンドラインに露出させず、
  * git の設定用環境変数で認証ヘッダを注入する (Git 2.31+)。

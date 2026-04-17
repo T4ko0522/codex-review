@@ -13,6 +13,13 @@ vi.mock("./codex.ts", () => ({
   runCodex: vi.fn(),
 }));
 
+// execa を fail させて issue レビューの fallback (isolated workspace) を通す
+vi.mock("execa", () => ({
+  execa: vi.fn(async () => {
+    throw new Error("execa disabled in tests");
+  }),
+}));
+
 const logger = pino({ level: "silent" });
 
 const config: AppConfig = {
