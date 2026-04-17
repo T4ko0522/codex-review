@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+import { ReviewJobSchema } from "../types.ts";
 import type { MessageRecord, ReviewJob, ThreadRecord } from "../types.ts";
 
 export class Store {
@@ -112,14 +113,23 @@ export class Store {
   }
 
   private safeParseJob(json: string, threadId: string): ReviewJob | null {
+    let parsed: unknown;
     try {
-      return JSON.parse(json) as ReviewJob;
+      parsed = JSON.parse(json);
     } catch {
       // 手動編集や旧バージョン由来の壊れた JSON は無視して reconstruction にフォールバック
       // eslint-disable-next-line no-console
       console.warn(`threads.job_json parse failed for ${threadId}`);
       return null;
     }
+    const result = ReviewJobSchema.safeParse(parsed);
+    if (!result.success) {
+      // 必須フィールド欠落や kind 不正など、構造的に不正な JSON は破棄する
+      // eslint-disable-next-line no-console
+      console.warn(`threads.job_json validation failed for ${threadId}: ${result.error.message}`);
+      return null;
+    }
+    return result.data;
   }
 
   addMessage(m: MessageRecord): void {

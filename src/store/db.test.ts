@@ -1,11 +1,23 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Store } from "./db.ts";
 
 let store: Store;
 let dir: string;
+
+/**
+ * Store API を経由せず、sqlite の threads.job_json 列に生の文字列を書き込む。
+ * safeParseJob の JSON.parse 失敗 / zod validate 失敗パスを直接叩くのに使う。
+ */
+function writeRawJobJson(storeDir: string, threadId: string, rawJson: string): void {
+  const db = new Database(join(storeDir, "codex-review.sqlite"));
+  db.pragma("foreign_keys = ON");
+  db.prepare("UPDATE threads SET job_json = ? WHERE thread_id = ?").run(rawJson, threadId);
+  db.close();
+}
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "codex-review-test-"));
@@ -103,6 +115,58 @@ describe("Store", () => {
       store.insertThread({ threadId: "t4", repo: "a/b", kind: "push", createdAt: 1 });
       const t = store.getThread("t4");
       expect(t!.job).toBeUndefined();
+    });
+
+    it("returns job=undefined when job_json is syntactically broken", () => {
+      store.insertThread({ threadId: "t5", repo: "a/b", kind: "push", createdAt: 1 });
+      store.close();
+      writeRawJobJson(dir, "t5", "{not-json");
+      store = new Store(dir);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const t = store.getThread("t5");
+      expect(t!.job).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("parse failed"));
+      warn.mockRestore();
+    });
+
+    it("returns job=undefined when required fields are missing", () => {
+      store.insertThread({ threadId: "t6", repo: "a/b", kind: "push", createdAt: 1 });
+      store.close();
+      // title / htmlUrl / sender などの必須フィールドを欠いた JSON を書き込む
+      writeRawJobJson(
+        dir,
+        "t6",
+        JSON.stringify({ kind: "push", repo: "a/b", repoUrl: "https://github.com/a/b" }),
+      );
+      store = new Store(dir);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const t = store.getThread("t6");
+      expect(t!.job).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("validation failed"));
+      warn.mockRestore();
+    });
+
+    it("returns job=undefined when kind is not a valid enum value", () => {
+      store.insertThread({ threadId: "t7", repo: "a/b", kind: "push", createdAt: 1 });
+      store.close();
+      writeRawJobJson(
+        dir,
+        "t7",
+        JSON.stringify({
+          kind: "foo",
+          repo: "a/b",
+          repoUrl: "https://github.com/a/b",
+          title: "x",
+          htmlUrl: "https://github.com/a/b",
+          sender: "alice",
+        }),
+      );
+      store = new Store(dir);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const t = store.getThread("t7");
+      expect(t!.job).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("validation failed"));
+      warn.mockRestore();
     });
   });
 
