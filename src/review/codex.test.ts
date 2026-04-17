@@ -101,7 +101,8 @@ describe("runCodex", () => {
       timeoutMs: 5000,
       logger,
     });
-    const [bin, args, opts] = vi.mocked(execa).mock.calls[0]!;
+    const call = (vi.mocked(execa).mock.calls as any[])[0]!;
+    const [bin, args, opts] = call as [string, string[], any];
     expect(bin).toBe("mycodex");
     expect(args).toEqual([
       "exec",
@@ -114,10 +115,10 @@ describe("runCodex", () => {
     ]);
     expect(opts).toMatchObject({ input: "the-prompt", timeout: 5000 });
     // maxBuffer を明示的に渡す (stdout が巨大でも切れないよう 64MiB)
-    expect(opts!.maxBuffer).toBe(64 * 1024 * 1024);
+    expect(opts.maxBuffer).toBe(64 * 1024 * 1024);
     // 環境変数は buildCodexEnv 経由で絞られる
-    expect(opts!.env!.NO_COLOR).toBe("1");
-    expect(opts!.env!.TERM).toBe("dumb");
+    expect(opts.env.NO_COLOR).toBe("1");
+    expect(opts.env.TERM).toBe("dumb");
   });
 
   it("throws with a helpful message including stderr snippet on failure", async () => {

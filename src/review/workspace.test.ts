@@ -276,7 +276,7 @@ describe("prepareWorkspace", () => {
   it("runs clone + fetch origin + checkout + rev-parse in order for non-fork PR", async () => {
     const sha = "a".repeat(40);
     const calls: Array<[string, string[]]> = [];
-    vi.mocked(execa).mockImplementation(async (bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (bin: any, args: any) => {
       calls.push([bin, args]);
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
@@ -304,7 +304,7 @@ describe("prepareWorkspace", () => {
 
   it("does not add --depth flag when depth <= 0 (full clone)", async () => {
     const sha = "b".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
     });
@@ -324,7 +324,7 @@ describe("prepareWorkspace", () => {
 
   it("adds fork remote and fetches from it when headRepoUrl is given", async () => {
     const sha = "c".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
     });
@@ -345,7 +345,7 @@ describe("prepareWorkspace", () => {
 
   it("injects auth headers via GIT_CONFIG_* env when token is provided", async () => {
     const sha = "d".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
     });
@@ -358,7 +358,9 @@ describe("prepareWorkspace", () => {
       githubToken: "ghs_mytoken",
       logger,
     });
-    const cloneCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "clone")!;
+    const cloneCall = (vi.mocked(execa).mock.calls as any[]).find(
+      (c: any) => c[1]?.[0] === "clone",
+    )!;
     const opts = cloneCall[2] as any;
     expect(opts.env.GIT_CONFIG_COUNT).toBe("1");
     expect(opts.env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
@@ -369,7 +371,7 @@ describe("prepareWorkspace", () => {
 
   it("throws and cleans up the directory when rev-parse returns mismatched SHA", async () => {
     const sha = "e".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: "ffffffffffffff" } as any;
       return { stdout: "" } as any;
     });
@@ -390,7 +392,7 @@ describe("prepareWorkspace", () => {
 
   it("cleans up when git clone itself fails", async () => {
     const sha = "f".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "clone") throw new Error("network down");
       return { stdout: "" } as any;
     });
@@ -492,7 +494,7 @@ describe("getDiff", () => {
   it("uses git diff between base and head when base fetch succeeds", async () => {
     const base = "b".repeat(40);
     const head = "a".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "diff") return { stdout: "DIFF_OUTPUT" } as any;
       return { stdout: "" } as any;
     });
@@ -506,7 +508,7 @@ describe("getDiff", () => {
   it("falls back to git show when base diff fails", async () => {
     const base = "b".repeat(40);
     const head = "a".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "fetch") return { stdout: "" } as any;
       if (args?.[0] === "diff") throw new Error("cannot diff");
       if (args?.[0] === "show") return { stdout: "SHOW_OUTPUT" } as any;
@@ -519,7 +521,7 @@ describe("getDiff", () => {
   it("tolerates fetch errors for base (continues to diff)", async () => {
     const base = "b".repeat(40);
     const head = "a".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "fetch") throw new Error("fetch failed");
       if (args?.[0] === "diff") return { stdout: "DIFF_OK" } as any;
       return { stdout: "" } as any;
@@ -530,7 +532,7 @@ describe("getDiff", () => {
 
   it("uses git show directly when base is omitted", async () => {
     const head = "a".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "show") return { stdout: "SHOW_ONLY" } as any;
       return { stdout: "" } as any;
     });
@@ -547,12 +549,14 @@ describe("getDiff", () => {
 
   it("injects GitHub auth env when token is given", async () => {
     const head = "a".repeat(40);
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "show") return { stdout: "x" } as any;
       return { stdout: "" } as any;
     });
     await getDiff("/work", undefined, head, logger, "ghs_tok");
-    const showCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "show")!;
+    const showCall = (vi.mocked(execa).mock.calls as any[]).find(
+      (c: any) => c[1]?.[0] === "show",
+    )!;
     const opts = showCall[2] as any;
     // git show の呼び出しには env は渡っていない (実装ではそうなっている) ことを確認
     // → 行 209 は env を渡さない fallback なので、token 有無の挙動違いは ここでは観察できない

@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.mocked(runCodex).mockImplementation(async ({ cwd }) => `cwd=${cwd}`);
   // execa はデフォルトの失敗実装に戻す
   vi.mocked(execa).mockReset();
-  vi.mocked(execa).mockImplementation(async () => {
+  vi.mocked(execa as any).mockImplementation(async () => {
     throw new Error("execa disabled in tests");
   });
 });
@@ -108,7 +108,7 @@ describe("runReview", () => {
 
   it("uses the cloned workspace for issue when clone succeeds", async () => {
     // git clone を成功させ (空のディレクトリとして残す)、runCodex まで成功させる
-    vi.mocked(execa).mockImplementation(async () => ({ stdout: "" }) as any);
+    vi.mocked(execa as any).mockImplementation(async () => ({ stdout: "" }) as any);
 
     const result = await runReview(issueJob, { env, config, logger });
 
@@ -143,7 +143,7 @@ describe("runReview (push/pull_request)", () => {
 
   it("runs full flow (clone + fetch + checkout + rev-parse + diff + codex) for push", async () => {
     // execa: rev-parse は sha、diff は適当、その他は空
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: "diff --git a/x b/x\n+foo" } as any;
       return { stdout: "" } as any;
@@ -164,7 +164,7 @@ describe("runReview (push/pull_request)", () => {
   });
 
   it("cleans up workspace when codex fails during push review", async () => {
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
     });
@@ -182,7 +182,7 @@ describe("runReview (push/pull_request)", () => {
       review: { ...config.review, maxDiffChars: 50 },
     };
     const bigDiff = `diff --git a/f b/f\n${"X".repeat(500)}`;
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: bigDiff } as any;
       return { stdout: "" } as any;
@@ -195,7 +195,7 @@ describe("runReview (push/pull_request)", () => {
   });
 
   it("does not truncate when diff is within maxDiffChars", async () => {
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: "short diff" } as any;
       return { stdout: "" } as any;
@@ -214,7 +214,7 @@ describe("runReview (push/pull_request)", () => {
       ...config,
       review: { ...config.review, maxDiffChars: 3 },
     };
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: diffStr } as any;
       return { stdout: "" } as any;
@@ -227,7 +227,7 @@ describe("runReview (push/pull_request)", () => {
   });
 
   it("passes CODEX_EXTRA_ARGS through to runCodex", async () => {
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       return { stdout: "" } as any;
     });
@@ -249,7 +249,7 @@ describe("runReview (push/pull_request)", () => {
       body: "Fix the thing",
       action: "opened",
     };
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: "" } as any;
       return { stdout: "" } as any;
@@ -275,7 +275,7 @@ describe("runReview (push/pull_request)", () => {
       ...config,
       review: { ...config.review, excludePaths: ["dist/**"] },
     };
-    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+    vi.mocked(execa as any).mockImplementation(async (_bin: any, args: any) => {
       if (args?.[0] === "rev-parse") return { stdout: sha } as any;
       if (args?.[0] === "diff") return { stdout: rawDiff } as any;
       return { stdout: "" } as any;
