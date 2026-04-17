@@ -16,8 +16,8 @@ services:
       # SQLite / clone 先を永続化
       - codex-data:/app/data
       - codex-workspaces:/app/workspaces
-      # ホスト側の codex 認証を共有 (~/.codex を読み込み)
-      - ${CODEX_AUTH_DIR:-~/.codex}:/root/.codex:ro
+      # ホスト側の codex 認証を共有 (トークンリフレッシュのため rw)
+      - ${CODEX_AUTH_DIR:-~/.codex}:/root/.codex
       # GitHub App 秘密鍵 (GitHub App 認証を使う場合のみ)
       - ${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}:/app/github-app-key.pem:ro
     healthcheck:
