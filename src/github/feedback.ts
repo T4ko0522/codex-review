@@ -123,10 +123,7 @@ export async function postCommitComment(
     });
     logger.info({ repo: job.repo, sha: job.sha }, "commit comment posted");
   } catch (err) {
-    logger.error(
-      { err: (err as Error).message, sha: job.sha },
-      "failed to post commit comment",
-    );
+    logger.error({ err: (err as Error).message, sha: job.sha }, "failed to post commit comment");
   }
 }
 

@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import pino from "pino";
-import {
-  createPushIssue,
-  hasSevereFindings,
-  postCommitComment,
-  postPrReview,
-} from "./feedback.ts";
+import { createPushIssue, hasSevereFindings, postCommitComment, postPrReview } from "./feedback.ts";
 import type { ReviewJob } from "../types.ts";
 
 const logger = pino({ level: "silent" });

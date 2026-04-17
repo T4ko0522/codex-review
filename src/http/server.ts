@@ -188,11 +188,7 @@ export async function startServer({
       }
     }
 
-    if (
-      job.kind === "pull_request" &&
-      config.filters.skipDraftPullRequests &&
-      job.isDraft
-    ) {
+    if (job.kind === "pull_request" && config.filters.skipDraftPullRequests && job.isDraft) {
       logger.info({ pr: job.number }, "draft PR, skip");
       return reply.code(202).send({ ok: true, skipped: "draft-pr" });
     }

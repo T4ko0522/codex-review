@@ -271,9 +271,9 @@ describe("HTTP server", () => {
 describe("HTTP server - protected-only push", () => {
   it("skips push to non-protected branch", async () => {
     await app.close();
-    const getBranchProtection = vi.fn().mockRejectedValue(
-      Object.assign(new Error("Not Found"), { status: 404 }),
-    );
+    const getBranchProtection = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 }));
     const fakeOctokit = {
       rest: {
         repos: { getBranchProtection },
@@ -440,11 +440,7 @@ describe("HTTP server - PR autoReviewOn", () => {
 });
 
 describe("HTTP server - mention via issue_comment", () => {
-  function makeIssueCommentBody(opts: {
-    body: string;
-    isPr?: boolean;
-    number?: number;
-  }) {
+  function makeIssueCommentBody(opts: { body: string; isPr?: boolean; number?: number }) {
     const number = opts.number ?? 42;
     const issue: Record<string, unknown> = {
       number,

@@ -46,10 +46,7 @@ export class JobQueue {
     try {
       const result = await Promise.race([this.q.onIdle().then(() => "idle" as const), timeout]);
       if (result === "timeout") {
-        this.deps.logger.warn(
-          { pending: this.q.pending, size: this.q.size },
-          "drain timed out",
-        );
+        this.deps.logger.warn({ pending: this.q.pending, size: this.q.size }, "drain timed out");
       }
     } finally {
       if (timer) clearTimeout(timer);

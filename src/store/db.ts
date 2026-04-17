@@ -109,7 +109,10 @@ export class Store {
       | undefined;
     if (!row) return null;
     const { jobJson, ...rest } = row;
-    return { ...rest, job: jobJson ? (this.safeParseJob(jobJson, threadId) ?? undefined) : undefined };
+    return {
+      ...rest,
+      job: jobJson ? (this.safeParseJob(jobJson, threadId) ?? undefined) : undefined,
+    };
   }
 
   private safeParseJob(json: string, threadId: string): ReviewJob | null {

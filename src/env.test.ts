@@ -26,7 +26,7 @@ describe("splitArgs", () => {
     expect(splitArgs('--foo="bar baz" --flag')).toEqual(["--foo=bar baz", "--flag"]);
   });
 
-  it("unescapes \\\" inside double quotes", () => {
+  it('unescapes \\" inside double quotes', () => {
     expect(splitArgs('--msg "say \\"hi\\""')).toEqual(["--msg", 'say "hi"']);
   });
 

@@ -324,7 +324,9 @@ describe("prepareWorkspace", () => {
     const cloneCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "clone");
     expect(cloneCall).toBeDefined();
     expect(cloneCall![1] as string[]).not.toContain("--depth=0");
-    expect((cloneCall![1] as string[]).find((a: string) => a.startsWith("--depth"))).toBeUndefined();
+    expect(
+      (cloneCall![1] as string[]).find((a: string) => a.startsWith("--depth")),
+    ).toBeUndefined();
   });
 
   it("adds fork remote and fetches from it when headRepoUrl is given", async () => {
@@ -559,9 +561,7 @@ describe("getDiff", () => {
       return { stdout: "" } as any;
     });
     await getDiff("/work", undefined, head, logger, "ghs_tok");
-    const showCall = (vi.mocked(execa).mock.calls as any[]).find(
-      (c: any) => c[1]?.[0] === "show",
-    )!;
+    const showCall = (vi.mocked(execa).mock.calls as any[]).find((c: any) => c[1]?.[0] === "show")!;
     const opts = showCall[2] as any;
     expect(opts.cwd).toBe("/work");
     // git show fallback は auth env を渡さない
@@ -579,9 +579,7 @@ describe("getDiff", () => {
     const fetchCall = (vi.mocked(execa).mock.calls as any[]).find(
       (c: any) => c[1]?.[0] === "fetch",
     )!;
-    const diffCall = (vi.mocked(execa).mock.calls as any[]).find(
-      (c: any) => c[1]?.[0] === "diff",
-    )!;
+    const diffCall = (vi.mocked(execa).mock.calls as any[]).find((c: any) => c[1]?.[0] === "diff")!;
     expect(fetchCall[2].env.GIT_CONFIG_COUNT).toBe("1");
     expect(fetchCall[2].env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
     expect(diffCall[2].env.GIT_CONFIG_COUNT).toBe("1");

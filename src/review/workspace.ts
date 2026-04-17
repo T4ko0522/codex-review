@@ -263,11 +263,7 @@ function parseDiffHeaderPath(part: string): string | null {
 function unescapeGitQuoted(s: string): string {
   // git が出すクォート内エスケープを概ね復元する (制御文字までは完全復元しないが、
   // フィルタ判定に使うパス文字列として十分な程度にする)。
-  return s
-    .replace(/\\\\/g, "\\")
-    .replace(/\\"/g, '"')
-    .replace(/\\t/g, "\t")
-    .replace(/\\n/g, "\n");
+  return s.replace(/\\\\/g, "\\").replace(/\\"/g, '"').replace(/\\t/g, "\t").replace(/\\n/g, "\n");
 }
 
 type PatternMatcher = ((s: string) => boolean) | { literal: string };
