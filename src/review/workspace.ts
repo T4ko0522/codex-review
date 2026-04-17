@@ -63,29 +63,17 @@ export async function prepareWorkspace(args: PrepareArgs): Promise<Workspace> {
   if (headRepoUrl) {
     logger.debug({ headRepoUrl }, "adding fork remote");
     await execa("git", ["remote", "add", "fork", headRepoUrl], execOpts(dir));
-    try {
-      await execa("git", ["fetch", "--quiet", "--depth=200", "fork", sha], execOpts(dir));
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, "fork fetch failed");
-    }
+    await execa("git", ["fetch", "--quiet", "--depth=200", "fork", sha], execOpts(dir));
   } else {
-    try {
-      await execa("git", ["fetch", "--quiet", "--depth=200", "origin", sha], execOpts(dir));
-    } catch (err) {
-      logger.debug(
-        { err: (err as Error).message },
-        "fetch sha failed, continuing with default branch",
-      );
-    }
+    await execa("git", ["fetch", "--quiet", "--depth=200", "origin", sha], execOpts(dir));
   }
 
-  try {
-    await execa("git", ["checkout", "--quiet", sha], execOpts(dir));
-  } catch (err) {
-    logger.warn(
-      { err: (err as Error).message, sha },
-      "checkout sha failed, staying on default HEAD",
-    );
+  await execa("git", ["checkout", "--quiet", sha], execOpts(dir));
+
+  // 実際の HEAD が期待 SHA と一致するか検証 (fail-fast)
+  const { stdout: actualSha } = await execa("git", ["rev-parse", "HEAD"], { cwd: dir });
+  if (!actualSha.startsWith(sha.slice(0, 12))) {
+    throw new Error(`SHA mismatch: expected ${sha}, got ${actualSha.trim()}`);
   }
 
   return {
