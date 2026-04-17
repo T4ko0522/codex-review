@@ -1,0 +1,53 @@
+# このファイルはレビュー対象のリポジトリ側 .github/workflows/ にコピーして使う。
+# 必須 secrets:
+#   - CODEX_REVIEW_URL:    Bot の公開 URL (例: https://review.example.com)
+#   - CODEX_REVIEW_SECRET: Bot 側 .env の WEBHOOK_SECRET と同じ値
+
+name: codex-review-notify
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-review-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send webhook
+        env:
+          URL: ${{ secrets.CODEX_REVIEW_URL }}
+          SECRET: ${{ secrets.CODEX_REVIEW_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          SENDER: ${{ github.event.sender.login }}
+          PAYLOAD: ${{ toJSON(github.event) }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "CODEX_REVIEW_URL / CODEX_REVIEW_SECRET が未設定です" >&2
+            exit 1
+          fi
+          BODY=$(jq -cn \
+            --arg event "$EVENT_NAME" \
+            --arg repo "$REPO" \
+            --arg sender "${SENDER:-}" \
+            --arg deliveredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson payload "$PAYLOAD" \
+            '{event:$event, repository:$repo, sender:$sender, deliveredAt:$deliveredAt, payload:$payload}')
+          SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
+          curl --fail-with-body -sS -X POST "$URL/webhook" \
+            -H "Content-Type: application/json" \
+            -H "X-Codex-Review-Signature: sha256=$SIG" \
+            --data-raw "$BODY"
