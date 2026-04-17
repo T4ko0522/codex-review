@@ -158,9 +158,10 @@ export async function prepareWorkspace(args: PrepareArgs): Promise<Workspace> {
     await execa("git", ["checkout", "--quiet", sha], execOpts(dir));
 
     // 実際の HEAD が期待 SHA と一致するか検証 (fail-fast)
-    const { stdout: actualSha } = await execa("git", ["rev-parse", "HEAD"], { cwd: dir });
+    const { stdout } = await execa("git", ["rev-parse", "HEAD"], { cwd: dir });
+    const actualSha = stdout.trim();
     if (!actualSha.startsWith(sha.slice(0, 12))) {
-      throw new Error(`SHA mismatch: expected ${sha}, got ${actualSha.trim()}`);
+      throw new Error(`SHA mismatch: expected ${sha}, got ${actualSha}`);
     }
   } catch (err) {
     cleanupWorkspace(dir, logger);
