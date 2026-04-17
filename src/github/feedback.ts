@@ -19,7 +19,7 @@ function safeBody(markdown: string): string {
  * プロンプトが指示する `重大度: Critical|High|Medium|Low|Nit` 表記に依存。
  */
 export function hasSevereFindings(markdown: string): boolean {
-	if (/特にな��/.test(markdown)) return false;
+	if (/特になし/.test(markdown)) return false;
 	return /重大度:\s*(Critical|High)/i.test(markdown);
 }
 
@@ -74,7 +74,7 @@ export async function createPushIssue(
 		`|------|-----|`,
 		`| ブランチ | \`${branch}\` |`,
 		`| コミット | \`${job.sha ?? ""}\` |`,
-		`| 送���者 | \`${job.sender}\` |`,
+		`| 送信者 | \`${job.sender}\` |`,
 		`| 比較 | ${job.htmlUrl} |`,
 		``,
 		markdown,
