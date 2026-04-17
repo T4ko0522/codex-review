@@ -65,6 +65,7 @@ beforeEach(() => {
     CODEX_BIN: "codex",
     CODEX_EXTRA_ARGS: "",
     CODEX_TIMEOUT_MS: 900_000,
+    SHUTDOWN_TIMEOUT_MS: 30_000,
     WORKSPACES_DIR: workspacesDir,
     DATA_DIR: workspacesDir,
     LOG_LEVEL: "info",

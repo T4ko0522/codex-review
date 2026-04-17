@@ -68,6 +68,7 @@ describe("loadEnv", () => {
     expect(env.GITHUB_APP_ID).toBe(123456);
     expect(env.GITHUB_APP_INSTALLATION_ID).toBe(789);
     expect(env.CODEX_TIMEOUT_MS).toBe(900_000);
+    expect(env.SHUTDOWN_TIMEOUT_MS).toBe(30_000);
   });
 
   it("throws when WEBHOOK_SECRET is too short", () => {
@@ -88,8 +89,15 @@ describe("loadEnv", () => {
   it("coerces numeric values", () => {
     process.env.HTTP_PORT = "8080";
     process.env.CODEX_TIMEOUT_MS = "60000";
+    process.env.SHUTDOWN_TIMEOUT_MS = "5000";
     const env = loadEnv();
     expect(env.HTTP_PORT).toBe(8080);
     expect(env.CODEX_TIMEOUT_MS).toBe(60_000);
+    expect(env.SHUTDOWN_TIMEOUT_MS).toBe(5_000);
+  });
+
+  it("rejects non-positive SHUTDOWN_TIMEOUT_MS", () => {
+    process.env.SHUTDOWN_TIMEOUT_MS = "0";
+    expect(() => loadEnv()).toThrow("SHUTDOWN_TIMEOUT_MS");
   });
 });

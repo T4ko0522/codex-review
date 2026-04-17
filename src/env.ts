@@ -21,6 +21,8 @@ const EnvSchema = z.object({
   CODEX_EXTRA_ARGS: z.string().optional().default(""),
   CODEX_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000),
 
+  SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+
   WORKSPACES_DIR: z.string().default("/app/workspaces"),
   DATA_DIR: z.string().default("/app/data"),
 

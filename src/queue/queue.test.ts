@@ -52,4 +52,34 @@ describe("JobQueue", () => {
     const queue = new JobQueue({ logger, handle: async () => {} });
     await queue.drain(); // should not hang
   });
+
+  it("drain with timeout returns before handler finishes when exceeded", async () => {
+    const queue = new JobQueue({
+      logger,
+      handle: async () => {
+        await new Promise((r) => setTimeout(r, 2000));
+      },
+    });
+    queue.enqueue(makeJob());
+    const start = Date.now();
+    await queue.drain(100);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(90);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it("drain without timeout waits until all jobs complete", async () => {
+    let completed = 0;
+    const queue = new JobQueue({
+      logger,
+      handle: async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        completed++;
+      },
+    });
+    queue.enqueue(makeJob());
+    queue.enqueue(makeJob());
+    await queue.drain();
+    expect(completed).toBe(2);
+  });
 });

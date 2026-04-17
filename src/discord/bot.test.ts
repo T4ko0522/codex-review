@@ -34,6 +34,7 @@ const envBase: Env = {
   CODEX_BIN: "codex",
   CODEX_EXTRA_ARGS: "",
   CODEX_TIMEOUT_MS: 900_000,
+  SHUTDOWN_TIMEOUT_MS: 30_000,
   WORKSPACES_DIR: "",
   DATA_DIR: "/tmp/data",
   LOG_LEVEL: "info",

@@ -78,6 +78,7 @@ docker compose logs -f codex-review
 | `CODEX_BIN`                   |          | `codex`           | Codex CLI のパス                                       |
 | `CODEX_EXTRA_ARGS`            |          | -                 | Codex 追加引数 (例: `--model gpt-5-codex --full-auto`) |
 | `CODEX_TIMEOUT_MS`            |          | `900000`          | Codex 実行タイムアウト (ms)                            |
+| `SHUTDOWN_TIMEOUT_MS`         |          | `30000`           | shutdown 時に `queue.drain` を待つ最大時間 (ms)        |
 | `WORKSPACES_DIR`              |          | `/app/workspaces` | clone 先ディレクトリ                                   |
 | `DATA_DIR`                    |          | `/app/data`       | SQLite 保存先                                          |
 | `LOG_LEVEL`                   |          | `info`            | `trace` / `debug` / `info` / `warn` / `error`          |

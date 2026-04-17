@@ -34,7 +34,25 @@ export class JobQueue {
     });
   }
 
-  async drain(): Promise<void> {
-    await this.q.onIdle();
+  async drain(timeoutMs?: number): Promise<void> {
+    if (timeoutMs === undefined) {
+      await this.q.onIdle();
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), timeoutMs);
+    });
+    try {
+      const result = await Promise.race([this.q.onIdle().then(() => "idle" as const), timeout]);
+      if (result === "timeout") {
+        this.deps.logger.warn(
+          { pending: this.q.pending, size: this.q.size },
+          "drain timed out",
+        );
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }
