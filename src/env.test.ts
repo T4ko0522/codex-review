@@ -21,6 +21,22 @@ describe("splitArgs", () => {
   it("keeps single-quoted groups together", () => {
     expect(splitArgs("-m 'a b c' -n")).toEqual(["-m", "a b c", "-n"]);
   });
+
+  it("merges quoted value attached to a flag", () => {
+    expect(splitArgs('--foo="bar baz" --flag')).toEqual(["--foo=bar baz", "--flag"]);
+  });
+
+  it("unescapes \\\" inside double quotes", () => {
+    expect(splitArgs('--msg "say \\"hi\\""')).toEqual(["--msg", 'say "hi"']);
+  });
+
+  it("unescapes backslash-space outside quotes", () => {
+    expect(splitArgs("foo\\ bar baz")).toEqual(["foo bar", "baz"]);
+  });
+
+  it("preserves empty quoted argument", () => {
+    expect(splitArgs('--empty "" next')).toEqual(["--empty", "", "next"]);
+  });
 });
 
 describe("loadEnv", () => {

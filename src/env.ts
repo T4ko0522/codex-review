@@ -41,12 +41,68 @@ export function loadEnv(): Env {
   return parsed.data;
 }
 
+/**
+ * シェル風のトークン分割。空白区切り + シングル/ダブルクォート + バックスラッシュエスケープに対応。
+ * - `--model gpt-4 --foo="bar baz"` → ["--model", "gpt-4", "--foo=bar baz"]
+ * - `"hello \"world\""` → [`hello "world"`]
+ * - クォート中の内容はそのまま (ネスト不可)
+ * 完全な POSIX 再現ではないが、codex の extra args 程度の入力には十分。
+ */
 export function splitArgs(value: string): string[] {
-  // シンプルなスペース区切り + ダブルクォート対応
   const out: string[] = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
-  while ((m = re.exec(value)) !== null) out.push(m[1] ?? m[2] ?? m[3] ?? "");
-  return out.filter(Boolean);
+  let cur = "";
+  let inSingle = false;
+  let inDouble = false;
+  let hasToken = false;
+
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      else cur += ch;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === "\\" && i + 1 < value.length) {
+        const next = value[i + 1]!;
+        // ダブルクォート内は \" と \\ のみエスケープとして解釈
+        if (next === '"' || next === "\\") {
+          cur += next;
+          i++;
+          continue;
+        }
+      }
+      if (ch === '"') inDouble = false;
+      else cur += ch;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      hasToken = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      hasToken = true;
+      continue;
+    }
+    if (ch === "\\" && i + 1 < value.length) {
+      cur += value[i + 1];
+      i++;
+      hasToken = true;
+      continue;
+    }
+    if (/\s/.test(ch!)) {
+      if (hasToken) {
+        out.push(cur);
+        cur = "";
+        hasToken = false;
+      }
+      continue;
+    }
+    cur += ch;
+    hasToken = true;
+  }
+  if (hasToken) out.push(cur);
+  return out;
 }
