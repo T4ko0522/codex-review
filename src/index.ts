@@ -5,7 +5,7 @@ import { loadEnv } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { DiscordBot } from "./discord/bot.ts";
 import { createGitHubClient } from "./github/client.ts";
-import { createPushIssue, postPrReview } from "./github/feedback.ts";
+import { createPushIssue, postCommitComment, postPrReview } from "./github/feedback.ts";
 import { startServer } from "./http/server.ts";
 import { JobQueue } from "./queue/queue.ts";
 import { buildDedupKey } from "./review/dedup.ts";
@@ -42,8 +42,13 @@ async function main() {
         if (config.github.prReviewComment && job.kind === "pull_request") {
           await postPrReview(gh.octokit, job, result.markdown, logger);
         }
-        if (config.github.pushIssueOnSevere && job.kind === "push") {
-          await createPushIssue(gh.octokit, job, result.markdown, logger);
+        if (job.kind === "push") {
+          if (config.github.pushCommitComment) {
+            await postCommitComment(gh.octokit, job, result.markdown, logger);
+          }
+          if (config.github.pushIssueOnSevere) {
+            await createPushIssue(gh.octokit, job, result.markdown, logger);
+          }
         }
 
         // Discord 投稿 (既存フロー)
@@ -68,6 +73,7 @@ async function main() {
     env,
     config,
     logger,
+    octokit: gh.octokit,
     enqueue: (job) => queue.enqueue(job),
     tryRegisterReview: (key) => store.tryRegisterReview(key),
   });

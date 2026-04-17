@@ -91,6 +91,46 @@ export async function postPrReview(
 }
 
 /**
+ * push レビューで head コミットにコメントを投稿する (best-effort)。
+ * Protected Branch への push が主な対象だが、呼び出し側で kind/条件を制御する前提。
+ */
+export async function postCommitComment(
+  octokit: Octokit,
+  job: ReviewJob,
+  markdown: string,
+  logger: Logger,
+): Promise<void> {
+  if (job.kind !== "push" || !job.sha) return;
+  const { owner, repo } = splitRepo(job.repo);
+  const branch = job.ref?.replace(/^refs\/heads\//, "") ?? "unknown";
+  const header = [
+    `## 自動レビュー結果`,
+    ``,
+    `| 項目 | 値 |`,
+    `|------|-----|`,
+    `| ブランチ | \`${branch}\` |`,
+    `| コミット | \`${job.sha}\` |`,
+    `| 送信者 | \`${job.sender}\` |`,
+    ``,
+  ].join("\n");
+  const body = safeBody(`${header}${markdown}`);
+  try {
+    await octokit.rest.repos.createCommitComment({
+      owner,
+      repo,
+      commit_sha: job.sha,
+      body,
+    });
+    logger.info({ repo: job.repo, sha: job.sha }, "commit comment posted");
+  } catch (err) {
+    logger.error(
+      { err: (err as Error).message, sha: job.sha },
+      "failed to post commit comment",
+    );
+  }
+}
+
+/**
  * push レビューで Critical/High が検出された場合に Issue を作成する (best-effort)。
  */
 export async function createPushIssue(

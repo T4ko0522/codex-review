@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import pino from "pino";
-import { createPushIssue, hasSevereFindings, postPrReview } from "./feedback.ts";
+import {
+  createPushIssue,
+  hasSevereFindings,
+  postCommitComment,
+  postPrReview,
+} from "./feedback.ts";
 import type { ReviewJob } from "../types.ts";
 
 const logger = pino({ level: "silent" });
@@ -145,6 +150,57 @@ describe("postPrReview", () => {
     const longBody = "あ".repeat(30_000);
     await postPrReview(octokit, makePrJob(), longBody, logger);
     const call = createReview.mock.calls[0]![0];
+    expect(Buffer.byteLength(call.body, "utf8")).toBeLessThanOrEqual(60_000);
+    expect(call.body).toContain("truncated");
+  });
+});
+
+describe("postCommitComment", () => {
+  it("skips when job kind is not push", async () => {
+    const createCommitComment = vi.fn();
+    const octokit = { rest: { repos: { createCommitComment } } } as any;
+    await postCommitComment(octokit, makePrJob(), "review", logger);
+    expect(createCommitComment).not.toHaveBeenCalled();
+  });
+
+  it("skips when sha is missing", async () => {
+    const createCommitComment = vi.fn();
+    const octokit = { rest: { repos: { createCommitComment } } } as any;
+    const job = { ...makePushJob(), sha: undefined };
+    await postCommitComment(octokit, job, "review", logger);
+    expect(createCommitComment).not.toHaveBeenCalled();
+  });
+
+  it("calls createCommitComment for valid push job", async () => {
+    const createCommitComment = vi.fn().mockResolvedValue({});
+    const octokit = { rest: { repos: { createCommitComment } } } as any;
+    await postCommitComment(octokit, makePushJob(), "## review\nLGTM", logger);
+    expect(createCommitComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "acme",
+        repo: "app",
+        commit_sha: "abc1234567890",
+      }),
+    );
+    const call = createCommitComment.mock.calls[0]![0];
+    expect(call.body).toContain("LGTM");
+    expect(call.body).toContain("自動レビュー結果");
+  });
+
+  it("does not throw on API error", async () => {
+    const createCommitComment = vi.fn().mockRejectedValue(new Error("API error"));
+    const octokit = { rest: { repos: { createCommitComment } } } as any;
+    await expect(
+      postCommitComment(octokit, makePushJob(), "review", logger),
+    ).resolves.toBeUndefined();
+  });
+
+  it("truncates very long body", async () => {
+    const createCommitComment = vi.fn().mockResolvedValue({});
+    const octokit = { rest: { repos: { createCommitComment } } } as any;
+    const longBody = "x".repeat(65_000);
+    await postCommitComment(octokit, makePushJob(), longBody, logger);
+    const call = createCommitComment.mock.calls[0]![0];
     expect(Buffer.byteLength(call.body, "utf8")).toBeLessThanOrEqual(60_000);
     expect(call.body).toContain("truncated");
   });
