@@ -76,9 +76,10 @@ describe("loadEnv", () => {
     expect(() => loadEnv()).toThrow("WEBHOOK_SECRET");
   });
 
-  it("throws when DISCORD_BOT_TOKEN is missing", () => {
+  it("allows missing DISCORD_BOT_TOKEN (optional)", () => {
     delete process.env.DISCORD_BOT_TOKEN;
-    expect(() => loadEnv()).toThrow("DISCORD_BOT_TOKEN");
+    const env = loadEnv();
+    expect(env.DISCORD_BOT_TOKEN).toBeUndefined();
   });
 
   it("throws when GITHUB_APP_ID is missing", () => {

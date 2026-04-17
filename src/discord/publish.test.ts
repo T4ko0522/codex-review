@@ -6,11 +6,21 @@ import type { ReviewJob } from "../types.ts";
 import { assertTextChannel, chunkMarkdown, publishReview, sendChunks } from "./publish.ts";
 
 const config: AppConfig = {
-  events: { push: true, pull_request: true, issues: true },
+  events: {
+    push: { enabled: true, mode: "protected-only" },
+    pull_request: { enabled: true, autoReviewOn: ["opened"] },
+    issues: { enabled: true, autoReviewOn: [] },
+  },
   filters: { repositories: [], branches: [], skipDraftPullRequests: true, skipBotSenders: true },
   review: { maxDiffChars: 200_000, cloneDepth: 50, includeExtensions: [], excludePaths: [] },
-  github: { prReviewComment: true, pushIssueOnSevere: true },
-  discord: { chunkSize: 1900, threadAutoArchiveMinutes: 1440, enableThreadChat: true },
+  github: { prReviewComment: true, pushCommitComment: true, pushIssueOnSevere: true },
+  mention: { triggers: ["@CodexRabbit[bot]"] },
+  discord: {
+    enabled: true,
+    chunkSize: 1900,
+    threadAutoArchiveMinutes: 1440,
+    enableThreadChat: true,
+  },
   workspace: { ttlMinutes: 1440 },
 };
 

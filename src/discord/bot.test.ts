@@ -5,7 +5,7 @@ import { join } from "node:path";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { AppConfig } from "../config.ts";
-import type { Env } from "../env.ts";
+import type { DiscordEnv } from "./bot.ts";
 import type { ReviewJob, ThreadRecord } from "../types.ts";
 import { DiscordBot } from "./bot.ts";
 import { runCodex } from "../review/codex.ts";
@@ -62,7 +62,7 @@ function makeFakeClient(fetched: unknown = { type: 0 }): FakeClient {
 
 const logger = pino({ level: "silent" });
 
-const envBase: Env = {
+const envBase: DiscordEnv = {
   HTTP_HOST: "127.0.0.1",
   HTTP_PORT: 3000,
   WEBHOOK_SECRET: "test-secret-12345678",
@@ -91,7 +91,12 @@ const config: AppConfig = {
   review: { maxDiffChars: 200_000, cloneDepth: 50, includeExtensions: [], excludePaths: [] },
   github: { prReviewComment: true, pushCommitComment: true, pushIssueOnSevere: true },
   mention: { triggers: ["@CodexRabbit[bot]"] },
-  discord: { chunkSize: 1900, threadAutoArchiveMinutes: 1440, enableThreadChat: true },
+  discord: {
+    enabled: true,
+    chunkSize: 1900,
+    threadAutoArchiveMinutes: 1440,
+    enableThreadChat: true,
+  },
   workspace: { ttlMinutes: 1440 },
 };
 

@@ -64,8 +64,10 @@ github:
   # push レビューで Critical/High が見つかった場合 Issue を作成する
   pushIssueOnSevere: true
 
-# Discord への投稿フォーマット
+# Discord 連携
 discord:
+  # false にすると Discord 連携を完全に無効化 (環境変数 DISCORD_* も不要になる)
+  enabled: true
   # 1 メッセージの最大文字数 (Discord の上限は 2000)
   chunkSize: 1900
   # スレッドの自動アーカイブ (分)。60, 1440, 4320, 10080 のいずれか

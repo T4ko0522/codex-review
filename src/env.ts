@@ -14,8 +14,8 @@ const EnvSchema = z.object({
     .int()
     .positive("GITHUB_APP_INSTALLATION_ID is required"),
 
-  DISCORD_BOT_TOKEN: z.string().min(1, "DISCORD_BOT_TOKEN is required"),
-  DISCORD_CHANNEL_ID: z.string().min(1, "DISCORD_CHANNEL_ID is required"),
+  DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  DISCORD_CHANNEL_ID: z.string().min(1).optional(),
 
   CODEX_BIN: z.string().default("codex"),
   CODEX_EXTRA_ARGS: z.string().optional().default(""),

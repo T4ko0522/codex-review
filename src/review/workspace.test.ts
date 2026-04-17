@@ -600,7 +600,7 @@ describe("cleanupWorkspace (via createIsolatedWorkspace)", () => {
       });
       ws.cleanup(); // 例外を投げずに完走する
       expect(warnFn).toHaveBeenCalledOnce();
-      expect(warnFn.mock.calls[0][1]).toBe("workspace cleanup failed");
+      expect(warnFn.mock.calls[0]![1]).toBe("workspace cleanup failed");
     } finally {
       rmSync(workspacesDir, { recursive: true, force: true });
     }

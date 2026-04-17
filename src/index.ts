@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { loadConfig } from "./config.ts";
 import { loadEnv } from "./env.ts";
 import { createLogger } from "./logger.ts";
-import { DiscordBot } from "./discord/bot.ts";
+import { DiscordBot, type DiscordEnv } from "./discord/bot.ts";
 import { createGitHubClient } from "./github/client.ts";
 import { createPushIssue, postCommitComment, postPrReview } from "./github/feedback.ts";
 import { startServer } from "./http/server.ts";
@@ -26,8 +26,19 @@ async function main() {
   const threadContext = new Map<string, ThreadContext>();
 
   const gh = await createGitHubClient(env, logger);
-  const bot = new DiscordBot({ env, config, logger, store, threadContext });
-  await bot.start();
+
+  let bot: DiscordBot | undefined;
+  if (config.discord.enabled) {
+    if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_CHANNEL_ID) {
+      throw new Error(
+        "discord.enabled=true ですが DISCORD_BOT_TOKEN / DISCORD_CHANNEL_ID が設定されていません",
+      );
+    }
+    bot = new DiscordBot({ env: env as DiscordEnv, config, logger, store, threadContext });
+    await bot.start();
+  } else {
+    logger.info("discord integration disabled");
+  }
 
   const queue = new JobQueue({
     logger,
@@ -56,11 +67,13 @@ async function main() {
           }
         }
 
-        // Discord 投稿 (既存フロー)
+        // Discord 投稿
         let kept = false;
         try {
-          await bot.publish(job, result.markdown, result.workspacePath);
-          kept = config.discord.enableThreadChat && Boolean(result.workspacePath);
+          if (bot) {
+            await bot.publish(job, result.markdown, result.workspacePath);
+            kept = config.discord.enableThreadChat && Boolean(result.workspacePath);
+          }
         } finally {
           if (!kept) result.cleanup?.();
         }
@@ -124,7 +137,7 @@ async function main() {
     clearInterval(sweepTimer);
     await server.close();
     await queue.drain(env.SHUTDOWN_TIMEOUT_MS);
-    await bot.stop();
+    await bot?.stop();
     store.close();
     cleanupAll();
     process.exit(0);

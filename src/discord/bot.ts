@@ -11,8 +11,11 @@ import { getFollowUpWorkspace } from "../review/workspace.ts";
 import type { Store } from "../store/db.ts";
 import { assertTextChannel, publishReview, sendChunks } from "./publish.ts";
 
+/** Discord Bot に渡す環境変数 (DISCORD_* が確定済み) */
+export type DiscordEnv = Env & { DISCORD_BOT_TOKEN: string; DISCORD_CHANNEL_ID: string };
+
 export interface BotDeps {
-  env: Env;
+  env: DiscordEnv;
   config: AppConfig;
   logger: Logger;
   store: Store;

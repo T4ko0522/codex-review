@@ -85,6 +85,7 @@ const ConfigSchema = z.object({
 
   discord: z
     .object({
+      enabled: z.boolean().default(true),
       chunkSize: z.number().int().positive().max(2000).default(1900),
       threadAutoArchiveMinutes: z
         .union([z.literal(60), z.literal(1440), z.literal(4320), z.literal(10080)])
@@ -92,6 +93,7 @@ const ConfigSchema = z.object({
       enableThreadChat: z.boolean().default(true),
     })
     .default({
+      enabled: true,
       chunkSize: 1900,
       threadAutoArchiveMinutes: 1440,
       enableThreadChat: true,

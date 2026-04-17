@@ -34,7 +34,12 @@ const config: AppConfig = {
   review: { maxDiffChars: 200_000, cloneDepth: 50, includeExtensions: [], excludePaths: [] },
   github: { prReviewComment: true, pushCommitComment: true, pushIssueOnSevere: true },
   mention: { triggers: ["@CodexRabbit[bot]"] },
-  discord: { chunkSize: 1900, threadAutoArchiveMinutes: 1440, enableThreadChat: true },
+  discord: {
+    enabled: true,
+    chunkSize: 1900,
+    threadAutoArchiveMinutes: 1440,
+    enableThreadChat: true,
+  },
   workspace: { ttlMinutes: 1440 },
 };
 
