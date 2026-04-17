@@ -17,7 +17,8 @@ services:
       - codex-data:/app/data
       - codex-workspaces:/app/workspaces
       # ホスト側の codex 認証を共有 (トークンリフレッシュのため rw)
-      - ${CODEX_AUTH_DIR:-~/.codex}:/root/.codex
+      # ~ は Docker Compose で展開されないため ${HOME} を使う
+      - ${CODEX_AUTH_DIR:-${HOME}/.codex}:/root/.codex
       # GitHub App 秘密鍵 (GitHub App 認証を使う場合のみ)
       - ${GITHUB_APP_PRIVATE_KEY_PATH:-/dev/null}:/app/github-app-key.pem:ro
     healthcheck:
