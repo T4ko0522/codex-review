@@ -19,34 +19,6 @@ GitHub への投稿は **GitHub App** (`CodexRabbit[bot]`) の専用アカウン
 - diff フィルタ (拡張子指定 / パス除外) で不要なファイルを除外
 - HMAC-SHA256 による webhook 署名検証
 
-## 全体フロー
-
-```
-GitHub (push / PR / Issue / コメント)
-      |  GitHub Actions (.github/workflows/codex-review.yml)
-      |  HMAC-SHA256 署名付き POST
-      v
-+-------------------------------------------------+
-|  CodexRabbit サーバー (Docker)                   |
-|                                                  |
-|  Fastify /webhook                                |
-|    -> 署名検証                                   |
-|    -> フィルタ (event mode / autoReview /        |
-|         protected / mention triggers)            |
-|    -> enqueue                                    |
-|                                                  |
-|  p-queue (concurrency=1)                         |
-|    -> git clone + diff                           |
-|    -> codex exec (子プロセス)                    |
-|    -> GitHub API                                 |
-|         (PR review / commit comment / Issue)     |
-|    -> Discord Bot (スレッド投稿)                 |
-|                                                  |
-|  Discord messageCreate                           |
-|    -> スレッド内 follow-up -> codex              |
-+-------------------------------------------------+
-```
-
 ## デプロイ
 
 導入・本番公開・運用の詳細手順は **[DEPLOY.md](./DEPLOY.md)** にまとめています。GitHub App / Discord Bot / Codex CLI の準備から、Docker でのサーバー起動、レビュー対象リポジトリへの GitHub Actions 追加、リバースプロキシ設定、トラブルシューティングまでカバーしています。
@@ -171,20 +143,9 @@ docker compose up -d --build
 | **プロセス再起動** | 全 workspace 消失。会話履歴は SQLite に残るが、実ファイル参照なしの応答になる                   |
 | **異常終了**       | `WORKSPACES_DIR` にディレクトリが残る。手動削除が必要                                           |
 
-## 開発
+## 開発・コントリビュート
 
-```bash
-pnpm install
-pnpm dev          # tsx watch (Node 直起動)
-pnpm build        # vp build (dist/index.js を生成)
-pnpm test         # vp test
-pnpm test:watch   # vp test watch
-pnpm coverage     # vp test run --coverage
-pnpm check        # vp check (Oxlint + Oxfmt + tsc)
-pnpm typecheck    # tsc --noEmit
-```
-
-テストは `vite-plus/test` から import し、`src/**/*.test.ts` に配置。
+[CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
 
 ## セキュリティ
 
