@@ -2,7 +2,7 @@
   "name": "codex-review",
   "version": "0.1.0",
   "private": true,
-  "description": "GitHub pushes / PRs / issues をフックして Codex CLI でレビューし Discord へ投稿する Bot",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
