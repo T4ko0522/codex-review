@@ -56,6 +56,8 @@ async function main() {
         }
       } catch (err) {
         // 失敗時は dedup キーを解除して再送での再試行を許可する。
+        // GitHub は同一 delivery を自動再送しないが、Actions 手動再実行や
+        // 管理者による再 dispatch のような「意図的な再送」で再レビューできるよう開放する。
         if (dedupKey) store.unregisterReview(dedupKey);
         throw err;
       }
