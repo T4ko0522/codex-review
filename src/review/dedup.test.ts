@@ -58,6 +58,41 @@ describe("buildDedupKey", () => {
     expect(buildDedupKey(job)).toBeNull();
   });
 
+  it("returns null for PR without number (sha alone is insufficient)", () => {
+    const job = baseJob({ kind: "pull_request", sha: "headsha00000000000000000000000000000000a" });
+    expect(buildDedupKey(job)).toBeNull();
+  });
+
+  it("returns null for PR without sha even when number is present", () => {
+    const job = baseJob({ kind: "pull_request", number: 5 });
+    expect(buildDedupKey(job)).toBeNull();
+  });
+
+  it("issue key treats missing body and empty body as equivalent", () => {
+    const a = baseJob({ kind: "issues", number: 9, title: "Bug" });
+    const b = baseJob({ kind: "issues", number: 9, title: "Bug", body: "" });
+    expect(buildDedupKey(a)).toBe(buildDedupKey(b));
+  });
+
+  it("issue key differs when title changes (body fixed)", () => {
+    const a = baseJob({ kind: "issues", number: 11, title: "A", body: "same" });
+    const b = baseJob({ kind: "issues", number: 11, title: "B", body: "same" });
+    expect(buildDedupKey(a)).not.toBe(buildDedupKey(b));
+  });
+
+  it("issue key uses a 16-char hex suffix", () => {
+    const job = baseJob({ kind: "issues", number: 1, title: "T", body: "B" });
+    const key = buildDedupKey(job);
+    expect(key).toMatch(/^issue:acme\/app:1:[0-9a-f]{16}$/);
+  });
+
+  it("push and PR keys differ even when same sha is reused", () => {
+    const sha = "abc0123abc0123abc0123abc0123abc0123abcd0";
+    const push = baseJob({ kind: "push", sha });
+    const pr = baseJob({ kind: "pull_request", sha, number: 1 });
+    expect(buildDedupKey(push)).not.toBe(buildDedupKey(pr));
+  });
+
   it("builds a mention key using commentId", () => {
     const job = baseJob({
       kind: "issues",
