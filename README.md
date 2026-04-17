@@ -1,42 +1,10 @@
 # CodexRabbit
 
-GitHub の push / pull_request / issues / issue_comment を契機に **OpenAI Codex CLI** でコードレビューを実行し、**GitHub** (PR コメント / コミットコメント / Issue 自動作成) と **Discord** (スレッド投稿 + 対話) の両方にフィードバックする Bot です。
-
-GitHub への投稿は **GitHub App** (`CodexRabbit[bot]`) の専用アカウントで行います。
-
-## 特徴
-
-- push / PR / Issue / PR・Issue コメント の 4 イベントに対応 (個別 ON/OFF 可)
-- 既定の発火ポリシー:
-  - **push**: Protected Branch への push のみ自動レビュー (GitHub API で保護状態を判定)
-  - **PR**: 作成時 (`opened`) のみ自動レビュー。`synchronize` などは mention 待ち
-  - **Issue**: 常に mention 待ち
-  - **mention**: PR/Issue コメント本文に `@CodexRabbit[bot]` を含めるとレビューが走る
-- `CodexRabbit[bot]` 名義で PR レビューコメント / コミットコメント / Issue を投稿
-- push レビューで Critical / High の指摘があれば Issue を自動起票
-- Discord スレッド内でレビューに対する追加質問が可能 (Codex が実ファイルを参照して回答)
-- fork PR に対応 (`pull_request_target` + fork remote fetch)
-- diff フィルタ (拡張子指定 / パス除外) で不要なファイルを除外
-- HMAC-SHA256 による webhook 署名検証
+GitHub の push / pull_request / issues / issue_comment を契機に **Codex CLI** でコードレビューを実行し、**GitHub** (PR コメント / コミットコメント / Issue 自動作成) と **Discord** (スレッド投稿 + 対話) の両方にフィードバックする Bot です。
 
 ## デプロイ
 
 導入・本番公開・運用の詳細手順は **[DEPLOY.md](./DEPLOY.md)** にまとめています。GitHub App / Discord Bot / Codex CLI の準備から、Docker でのサーバー起動、レビュー対象リポジトリへの GitHub Actions 追加、リバースプロキシ設定、トラブルシューティングまでカバーしています。
-
-Quickstart (既に事前準備が済んでいる場合):
-
-```bash
-cp .env.example .env            # 値を編集
-cp config.example.yml config.yml
-
-# GHCR の公開イメージを使う場合
-docker pull ghcr.io/t4ko0522/codexrabbit:latest
-docker compose up -d
-docker compose logs -f codex-review
-
-# ローカルでビルドする場合 (マルチステージビルド、ホスト側の Node.js 不要)
-docker compose up -d --build
-```
 
 ## 環境変数リファレンス (.env)
 
@@ -46,8 +14,8 @@ docker compose up -d --build
 | `GITHUB_APP_ID`               | **必須** | -                 | GitHub App の App ID                                   |
 | `GITHUB_APP_PRIVATE_KEY_PATH` | **必須** | -                 | PEM 秘密鍵のファイルパス                               |
 | `GITHUB_APP_INSTALLATION_ID`  | **必須** | -                 | GitHub App の Installation ID                          |
-| `DISCORD_BOT_TOKEN`           | **必須** | -                 | Discord Bot Token                                      |
-| `DISCORD_CHANNEL_ID`          | **必須** | -                 | レビュー投稿先チャンネル ID                            |
+| `DISCORD_BOT_TOKEN`           |          | -                 | Discord Bot Token                                      |
+| `DISCORD_CHANNEL_ID`          |          | -                 | レビュー投稿先チャンネル ID                            |
 | `HTTP_HOST`                   |          | `127.0.0.1`       | リスンアドレス                                         |
 | `HTTP_PORT`                   |          | `3000`            | リスンポート                                           |
 | `CODEX_BIN`                   |          | `codex`           | Codex CLI のパス                                       |
@@ -108,11 +76,12 @@ docker compose up -d --build
 
 ### discord
 
-| キー                       | デフォルト | 説明                                 |
-| -------------------------- | ---------- | ------------------------------------ |
-| `chunkSize`                | `1900`     | 1 メッセージの最大文字数 (上限 2000) |
-| `threadAutoArchiveMinutes` | `1440`     | `60` / `1440` / `4320` / `10080`     |
-| `enableThreadChat`         | `true`     | スレッド内での対話応答               |
+| キー                       | デフォルト | 説明                                                            |
+| -------------------------- | ---------- | --------------------------------------------------------------- |
+| `enabled`                  | `true`     | `false` で Discord 連携を無効化 (環境変数 `DISCORD_*` も不要に) |
+| `chunkSize`                | `1900`     | 1 メッセージの最大文字数 (上限 2000)                            |
+| `threadAutoArchiveMinutes` | `1440`     | `60` / `1440` / `4320` / `10080`                                |
+| `enableThreadChat`         | `true`     | スレッド内での対話応答                                          |
 
 ### workspace
 
