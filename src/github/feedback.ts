@@ -17,10 +17,31 @@ function safeBody(markdown: string): string {
 /**
  * レビュー Markdown から最大重大度を判定する。
  * プロンプトが指示する `重大度: Critical|High|Medium|Low|Nit` 表記に依存。
+ *
+ * 判定は `## 主要な指摘` セクションの内部に限定する。
+ * - 他セクション (良かった点など) の「特になし」で誤って無効化されない
+ * - 他セクション内で引用された「重大度: High」等で誤検出しない
  */
 export function hasSevereFindings(markdown: string): boolean {
-  if (/特になし/.test(markdown)) return false;
-  return /重大度:\s*(Critical|High)/i.test(markdown);
+  const section = extractFindingsSection(markdown);
+  if (section === null) return false;
+  // 指摘セクション自体が「特になし」表明のみの場合は無視
+  if (/^\s*特になし\s*$/m.test(section)) return false;
+  return /重大度:\s*(Critical|High)/i.test(section);
+}
+
+/**
+ * `## 主要な指摘` 見出し直下から、次の `## ` 見出し直前までを抽出。
+ * 見出しが存在しない場合は null。
+ */
+function extractFindingsSection(markdown: string): string | null {
+  const start = markdown.search(/^##\s*主要な指摘\s*$/m);
+  if (start < 0) return null;
+  const rest = markdown.slice(start);
+  const afterHeading = rest.indexOf("\n");
+  const body = afterHeading >= 0 ? rest.slice(afterHeading + 1) : "";
+  const nextHeading = body.search(/^##\s+/m);
+  return nextHeading >= 0 ? body.slice(0, nextHeading) : body;
 }
 
 /**

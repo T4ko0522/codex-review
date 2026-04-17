@@ -39,6 +39,37 @@ describe("hasSevereFindings", () => {
   it("returns false for empty string", () => {
     expect(hasSevereFindings("")).toBe(false);
   });
+
+  it("ignores 特になし in non-findings sections", () => {
+    const md = [
+      "## 概要",
+      "リファクタ",
+      "## 主要な指摘",
+      "### src/a.ts:1 重大度: Critical",
+      "危険",
+      "## 良かった点",
+      "特になし",
+    ].join("\n");
+    expect(hasSevereFindings(md)).toBe(true);
+  });
+
+  it("ignores severity keywords in non-findings sections", () => {
+    const md = [
+      "## 概要",
+      "Critical path のリファクタ",
+      "## 主要な指摘",
+      "### src/a.ts:1 重大度: Medium",
+      "普通",
+      "## リスク評価",
+      "- 重大度: High のリグレッションに注意",
+    ].join("\n");
+    expect(hasSevereFindings(md)).toBe(false);
+  });
+
+  it("returns false when 主要な指摘 heading is absent", () => {
+    const md = "### src/a.ts:1 重大度: Critical\n危険";
+    expect(hasSevereFindings(md)).toBe(false);
+  });
 });
 
 const makePrJob = (): ReviewJob => ({
@@ -124,7 +155,8 @@ describe("createPushIssue", () => {
   it("creates issue for Critical finding", async () => {
     const create = vi.fn().mockResolvedValue({ data: { number: 99 } });
     const octokit = { rest: { issues: { create } } } as any;
-    await createPushIssue(octokit, makePushJob(), "### file:1 重大度: Critical\nバグ", logger);
+    const md = "## 主要な指摘\n### file:1 重大度: Critical\nバグ";
+    await createPushIssue(octokit, makePushJob(), md, logger);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         owner: "acme",
@@ -138,8 +170,7 @@ describe("createPushIssue", () => {
   it("does not throw on API error", async () => {
     const create = vi.fn().mockRejectedValue(new Error("API error"));
     const octokit = { rest: { issues: { create } } } as any;
-    await expect(
-      createPushIssue(octokit, makePushJob(), "重大度: High\n問題", logger),
-    ).resolves.toBeUndefined();
+    const md = "## 主要な指摘\n### file:1 重大度: High\n問題";
+    await expect(createPushIssue(octokit, makePushJob(), md, logger)).resolves.toBeUndefined();
   });
 });
