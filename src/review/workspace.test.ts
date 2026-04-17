@@ -1,5 +1,9 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import pino from "pino";
 import { describe, expect, it } from "vite-plus/test";
-import { filterDiff } from "./workspace.ts";
+import { createIsolatedWorkspace, filterDiff, getFollowUpWorkspace } from "./workspace.ts";
 
 const SAMPLE_DIFF = [
   "diff --git a/src/index.ts b/src/index.ts",
@@ -27,6 +31,51 @@ const SAMPLE_DIFF = [
   "-old",
   "+new",
 ].join("\n");
+
+const logger = pino({ level: "silent" });
+
+describe("workspace helpers", () => {
+  it("creates an isolated workspace under WORKSPACES_DIR", () => {
+    const workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-ws-"));
+    try {
+      const workspace = createIsolatedWorkspace(workspacesDir, logger);
+      expect(workspace.path).not.toBe(workspacesDir);
+      expect(workspace.path.startsWith(workspacesDir)).toBe(true);
+      expect(existsSync(workspace.path)).toBe(true);
+      workspace.cleanup();
+      expect(existsSync(workspace.path)).toBe(false);
+    } finally {
+      rmSync(workspacesDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses an existing follow-up workspace when it still exists", () => {
+    const workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-ws-"));
+    try {
+      const original = createIsolatedWorkspace(workspacesDir, logger);
+      const workspace = getFollowUpWorkspace(workspacesDir, original.path, logger);
+      expect(workspace.path).toBe(original.path);
+      workspace.cleanup();
+      expect(existsSync(original.path)).toBe(true);
+      original.cleanup();
+    } finally {
+      rmSync(workspacesDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to a new isolated workspace when follow-up context is missing", () => {
+    const workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-ws-"));
+    try {
+      const workspace = getFollowUpWorkspace(workspacesDir, undefined, logger);
+      expect(workspace.path).not.toBe(workspacesDir);
+      expect(workspace.path.startsWith(workspacesDir)).toBe(true);
+      workspace.cleanup();
+      expect(existsSync(workspace.path)).toBe(false);
+    } finally {
+      rmSync(workspacesDir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("filterDiff", () => {
   it("returns raw diff when no filters are set", () => {

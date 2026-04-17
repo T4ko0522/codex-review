@@ -40,13 +40,13 @@ GitHub (push / PR / Issue)
 
 ## 前提条件
 
-| 項目 | 要件 |
-|------|------|
-| Node.js | >= 20.11 |
-| pnpm | 9.x (corepack 経由) |
-| Vite+ (`vp`) | ホスト側にインストール (ビルド用) |
-| Docker | compose v2 |
-| Git | >= 2.31 |
+| 項目             | 要件                                           |
+| ---------------- | ---------------------------------------------- |
+| Node.js          | >= 20.11                                       |
+| pnpm             | 9.x (corepack 経由)                            |
+| Vite+ (`vp`)     | ホスト側にインストール (ビルド用)              |
+| Docker           | compose v2                                     |
+| Git              | >= 2.31                                        |
 | OpenAI Codex CLI | `~/.codex` に認証情報、または `OPENAI_API_KEY` |
 
 ## セットアップ
@@ -55,13 +55,13 @@ GitHub (push / PR / Issue)
 
 <https://github.com/settings/apps/new> で App を作成します。
 
-| 設定項目 | 値 |
-|---------|---|
-| App name | 任意 (例: `codex-review`) |
-| Homepage URL | 任意 |
-| Webhook | **Active のチェックを外す** (不要) |
-| Repository permissions | `Contents: Read`, `Issues: Read & Write`, `Pull requests: Read & Write` |
-| Where can this app be installed? | **Only on this account** |
+| 設定項目                         | 値                                                                      |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| App name                         | 任意 (例: `codex-review`)                                               |
+| Homepage URL                     | 任意                                                                    |
+| Webhook                          | **Active のチェックを外す** (不要)                                      |
+| Repository permissions           | `Contents: Read`, `Issues: Read & Write`, `Pull requests: Read & Write` |
+| Where can this app be installed? | **Only on this account**                                                |
 
 作成後:
 
@@ -129,73 +129,73 @@ docker compose logs -f
 
 [`actions/codex-review.yml`](./actions/codex-review.yml) を対象リポの `.github/workflows/codex-review.yml` にコピーし、以下の Secrets を設定:
 
-| Secret | 値 |
-|--------|---|
-| `CODEX_REVIEW_URL` | Bot の公開 URL (例: `https://review.example.com`) |
-| `CODEX_REVIEW_SECRET` | `.env` の `WEBHOOK_SECRET` と同じ値 |
+| Secret                | 値                                                |
+| --------------------- | ------------------------------------------------- |
+| `CODEX_REVIEW_URL`    | Bot の公開 URL (例: `https://review.example.com`) |
+| `CODEX_REVIEW_SECRET` | `.env` の `WEBHOOK_SECRET` と同じ値               |
 
 ## 環境変数リファレンス (.env)
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|:----:|-----------|------|
-| `WEBHOOK_SECRET` | **必須** | - | HMAC-SHA256 署名検証用 (8 文字以上) |
-| `GITHUB_APP_ID` | **必須** | - | GitHub App の App ID |
-| `GITHUB_APP_PRIVATE_KEY_PATH` | **必須** | - | PEM 秘密鍵のファイルパス |
-| `GITHUB_APP_INSTALLATION_ID` | **必須** | - | GitHub App の Installation ID |
-| `DISCORD_BOT_TOKEN` | **必須** | - | Discord Bot Token |
-| `DISCORD_CHANNEL_ID` | **必須** | - | レビュー投稿先チャンネル ID |
-| `HTTP_HOST` | | `127.0.0.1` | リスンアドレス |
-| `HTTP_PORT` | | `3000` | リスンポート |
-| `CODEX_BIN` | | `codex` | Codex CLI のパス |
-| `CODEX_EXTRA_ARGS` | | - | Codex 追加引数 (例: `--model gpt-5-codex --full-auto`) |
-| `CODEX_TIMEOUT_MS` | | `900000` | Codex 実行タイムアウト (ms) |
-| `WORKSPACES_DIR` | | `/app/workspaces` | clone 先ディレクトリ |
-| `DATA_DIR` | | `/app/data` | SQLite 保存先 |
-| `LOG_LEVEL` | | `info` | `trace` / `debug` / `info` / `warn` / `error` |
-| `CONFIG_FILE` | | `/app/config.yml` | config ファイルパス |
+| 変数                          |   必須   | デフォルト        | 説明                                                   |
+| ----------------------------- | :------: | ----------------- | ------------------------------------------------------ |
+| `WEBHOOK_SECRET`              | **必須** | -                 | HMAC-SHA256 署名検証用 (8 文字以上)                    |
+| `GITHUB_APP_ID`               | **必須** | -                 | GitHub App の App ID                                   |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | **必須** | -                 | PEM 秘密鍵のファイルパス                               |
+| `GITHUB_APP_INSTALLATION_ID`  | **必須** | -                 | GitHub App の Installation ID                          |
+| `DISCORD_BOT_TOKEN`           | **必須** | -                 | Discord Bot Token                                      |
+| `DISCORD_CHANNEL_ID`          | **必須** | -                 | レビュー投稿先チャンネル ID                            |
+| `HTTP_HOST`                   |          | `127.0.0.1`       | リスンアドレス                                         |
+| `HTTP_PORT`                   |          | `3000`            | リスンポート                                           |
+| `CODEX_BIN`                   |          | `codex`           | Codex CLI のパス                                       |
+| `CODEX_EXTRA_ARGS`            |          | -                 | Codex 追加引数 (例: `--model gpt-5-codex --full-auto`) |
+| `CODEX_TIMEOUT_MS`            |          | `900000`          | Codex 実行タイムアウト (ms)                            |
+| `WORKSPACES_DIR`              |          | `/app/workspaces` | clone 先ディレクトリ                                   |
+| `DATA_DIR`                    |          | `/app/data`       | SQLite 保存先                                          |
+| `LOG_LEVEL`                   |          | `info`            | `trace` / `debug` / `info` / `warn` / `error`          |
+| `CONFIG_FILE`                 |          | `/app/config.yml` | config ファイルパス                                    |
 
 ## 設定リファレンス (config.yml)
 
 ### events
 
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `push` | `true` | push イベントのレビュー |
-| `pull_request` | `true` | PR イベントのレビュー |
-| `issues` | `true` | Issue イベントの分析 |
+| キー           | デフォルト | 説明                    |
+| -------------- | ---------- | ----------------------- |
+| `push`         | `true`     | push イベントのレビュー |
+| `pull_request` | `true`     | PR イベントのレビュー   |
+| `issues`       | `true`     | Issue イベントの分析    |
 
 ### filters
 
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `repositories` | `[]` | 許可リポ (`owner/repo` or `owner/*`)。空なら全許可 |
-| `branches` | `[]` | push 対象ブランチ。空なら全許可 |
-| `skipDraftPullRequests` | `true` | Draft PR をスキップ |
-| `skipBotSenders` | `true` | `*[bot]` sender をスキップ |
+| キー                    | デフォルト | 説明                                               |
+| ----------------------- | ---------- | -------------------------------------------------- |
+| `repositories`          | `[]`       | 許可リポ (`owner/repo` or `owner/*`)。空なら全許可 |
+| `branches`              | `[]`       | push 対象ブランチ。空なら全許可                    |
+| `skipDraftPullRequests` | `true`     | Draft PR をスキップ                                |
+| `skipBotSenders`        | `true`     | `*[bot]` sender をスキップ                         |
 
 ### review
 
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `maxDiffChars` | `200000` | diff の最大文字数 (超過分は切り詰め) |
-| `cloneDepth` | `50` | shallow clone の depth (0 で full clone) |
-| `includeExtensions` | `[]` | レビュー対象の拡張子 (例: `["ts", "js"]`)。空なら全て |
-| `excludePaths` | `[]` | 除外パス (glob 風: `node_modules/**`, `*.lock` 等) |
+| キー                | デフォルト | 説明                                                  |
+| ------------------- | ---------- | ----------------------------------------------------- |
+| `maxDiffChars`      | `200000`   | diff の最大文字数 (超過分は切り詰め)                  |
+| `cloneDepth`        | `50`       | shallow clone の depth (0 で full clone)              |
+| `includeExtensions` | `[]`       | レビュー対象の拡張子 (例: `["ts", "js"]`)。空なら全て |
+| `excludePaths`      | `[]`       | 除外パス (glob 風: `node_modules/**`, `*.lock` 等)    |
 
 ### github
 
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `prReviewComment` | `true` | PR にレビューコメントを投稿 |
-| `pushIssueOnSevere` | `true` | push で Critical/High 検出時に Issue を自動作成 |
+| キー                | デフォルト | 説明                                            |
+| ------------------- | ---------- | ----------------------------------------------- |
+| `prReviewComment`   | `true`     | PR にレビューコメントを投稿                     |
+| `pushIssueOnSevere` | `true`     | push で Critical/High 検出時に Issue を自動作成 |
 
 ### discord
 
-| キー | デフォルト | 説明 |
-|------|-----------|------|
-| `chunkSize` | `1900` | 1 メッセージの最大文字数 (上限 2000) |
-| `threadAutoArchiveMinutes` | `1440` | `60` / `1440` / `4320` / `10080` |
-| `enableThreadChat` | `true` | スレッド内での対話応答 |
+| キー                       | デフォルト | 説明                                 |
+| -------------------------- | ---------- | ------------------------------------ |
+| `chunkSize`                | `1900`     | 1 メッセージの最大文字数 (上限 2000) |
+| `threadAutoArchiveMinutes` | `1440`     | `60` / `1440` / `4320` / `10080`     |
+| `enableThreadChat`         | `true`     | スレッド内での対話応答               |
 
 ## GitHub フィードバック
 
@@ -212,11 +212,11 @@ docker compose logs -f
 
 ### workspace のライフサイクル
 
-| 状態 | 挙動 |
-|------|------|
-| **通常運用** | 最後の活動から `threadAutoArchiveMinutes` 経過で自動削除 (10 分間隔スイープ)。会話中は TTL リセット |
-| **プロセス再起動** | 全 workspace 消失。会話履歴は SQLite に残るが、実ファイル参照なしの応答になる |
-| **異常終了** | `WORKSPACES_DIR` にディレクトリが残る。手動削除が必要 |
+| 状態               | 挙動                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| **通常運用**       | 最後の活動から `threadAutoArchiveMinutes` 経過で自動削除 (10 分間隔スイープ)。会話中は TTL リセット |
+| **プロセス再起動** | 全 workspace 消失。会話履歴は SQLite に残るが、実ファイル参照なしの応答になる                       |
+| **異常終了**       | `WORKSPACES_DIR` にディレクトリが残る。手動削除が必要                                               |
 
 ## 開発
 
@@ -239,3 +239,4 @@ pnpm typecheck    # tsc --noEmit
 - GitHub トークンは `GIT_CONFIG_*` 環境変数経由で git に渡し、URL やコマンドラインに露出しない
 - GitHub App は **Private** (自分のアカウントのみインストール可能) に設定
 - Docker コンテナは非 root 化を行っていません。必要に応じて `USER node` を追加してください
+- Codex CLI 子プロセスへは `PATH` や `OPENAI_*` など最小限の環境変数のみを引き渡し、`DISCORD_BOT_TOKEN` など他の secrets は渡しません

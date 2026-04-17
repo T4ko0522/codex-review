@@ -5,7 +5,7 @@ import type { ReviewJob } from "../types.ts";
 import { splitArgs } from "../env.ts";
 import { runCodex } from "./codex.ts";
 import { buildReviewPrompt } from "./prompt.ts";
-import { filterDiff, getDiff, prepareWorkspace } from "./workspace.ts";
+import { createIsolatedWorkspace, filterDiff, getDiff, prepareWorkspace } from "./workspace.ts";
 
 export interface ReviewResult {
   markdown: string;
@@ -32,16 +32,22 @@ export async function runReview(job: ReviewJob, deps: RunReviewDeps): Promise<Re
 
   // issue は clone 不要
   if (job.kind === "issues") {
-    const prompt = buildReviewPrompt(job, "");
-    const markdown = await runCodex({
-      bin: env.CODEX_BIN,
-      extraArgs,
-      cwd: env.WORKSPACES_DIR,
-      prompt,
-      timeoutMs: env.CODEX_TIMEOUT_MS,
-      logger,
-    });
-    return { markdown };
+    const ws = createIsolatedWorkspace(env.WORKSPACES_DIR, logger);
+    try {
+      const prompt = buildReviewPrompt(job, "");
+      const markdown = await runCodex({
+        bin: env.CODEX_BIN,
+        extraArgs,
+        cwd: ws.path,
+        prompt,
+        timeoutMs: env.CODEX_TIMEOUT_MS,
+        logger,
+      });
+      return { markdown, workspacePath: ws.path, cleanup: ws.cleanup };
+    } catch (err) {
+      ws.cleanup();
+      throw err;
+    }
   }
 
   if (!job.sha) throw new Error("sha is required for push/pull_request review");
@@ -64,22 +70,27 @@ export async function runReview(job: ReviewJob, deps: RunReviewDeps): Promise<Re
   });
   const diff = truncate(filteredDiff, config.review.maxDiffChars);
 
-  const prompt = buildReviewPrompt(job, diff);
-  const markdown = await runCodex({
-    bin: env.CODEX_BIN,
-    extraArgs,
-    cwd: ws.path,
-    prompt,
-    timeoutMs: env.CODEX_TIMEOUT_MS,
-    logger,
-  });
+  try {
+    const prompt = buildReviewPrompt(job, diff);
+    const markdown = await runCodex({
+      bin: env.CODEX_BIN,
+      extraArgs,
+      cwd: ws.path,
+      prompt,
+      timeoutMs: env.CODEX_TIMEOUT_MS,
+      logger,
+    });
 
-  return {
-    markdown,
-    workspacePath: ws.path,
-    diff,
-    cleanup: ws.cleanup,
-  };
+    return {
+      markdown,
+      workspacePath: ws.path,
+      diff,
+      cleanup: ws.cleanup,
+    };
+  } catch (err) {
+    ws.cleanup();
+    throw err;
+  }
 }
 
 function truncate(s: string, max: number): string {

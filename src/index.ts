@@ -10,7 +10,7 @@ import { startServer } from "./http/server.ts";
 import { JobQueue } from "./queue/queue.ts";
 import { runReview } from "./review/runner.ts";
 import { Store } from "./store/db.ts";
-import type { ReviewJob, ThreadContext } from "./types.ts";
+import type { ThreadContext } from "./types.ts";
 
 async function main() {
   const env = loadEnv();
@@ -46,12 +46,8 @@ async function main() {
       // Discord 投稿 (既存フロー)
       let kept = false;
       try {
-        const thread = await bot.publish(job, result.markdown, result.workspacePath);
-        if (config.discord.enableThreadChat && result.workspacePath) {
-          const now = Date.now();
-          threadContext.set(thread.id, { job, workspacePath: result.workspacePath, createdAt: now, lastActivityAt: now });
-          kept = true;
-        }
+        await bot.publish(job, result.markdown, result.workspacePath);
+        kept = config.discord.enableThreadChat && Boolean(result.workspacePath);
       } finally {
         if (!kept) result.cleanup?.();
       }
@@ -71,12 +67,20 @@ async function main() {
   const sweepTimer = setInterval(() => {
     const now = Date.now();
     for (const [id, ctx] of threadContext) {
-      if (now - ctx.lastActivityAt > ttlMs && ctx.workspacePath) {
+      if (now - ctx.lastActivityAt <= ttlMs) continue;
+      if (ctx.workspacePath) {
         rm(ctx.workspacePath, { recursive: true, force: true })
-          .then(() => logger.info({ threadId: id, age: Math.round((now - ctx.createdAt) / 60_000) }, "stale workspace cleaned"))
-          .catch(() => {/* best effort */});
-        threadContext.delete(id);
+          .then(() =>
+            logger.info(
+              { threadId: id, age: Math.round((now - ctx.createdAt) / 60_000) },
+              "stale workspace cleaned",
+            ),
+          )
+          .catch(() => {
+            /* best effort */
+          });
       }
+      threadContext.delete(id);
     }
   }, SWEEP_INTERVAL_MS);
 

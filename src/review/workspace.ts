@@ -1,5 +1,5 @@
-import { mkdirSync, rmSync } from "node:fs";
-import { join, extname } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { extname, join } from "node:path";
 import { execa } from "execa";
 import type { Logger } from "../logger.ts";
 
@@ -32,6 +32,29 @@ function assertSha(value: string): void {
   if (!SHA_RE.test(value)) throw new Error(`invalid SHA format: ${value}`);
 }
 
+export function createIsolatedWorkspace(workspacesDir: string, logger: Logger): Workspace {
+  mkdirSync(workspacesDir, { recursive: true });
+  const dir = mkdtempSync(join(workspacesDir, "session-"));
+  return {
+    path: dir,
+    cleanup: () => cleanupWorkspace(dir, logger),
+  };
+}
+
+export function getFollowUpWorkspace(
+  workspacesDir: string,
+  workspacePath: string | undefined,
+  logger: Logger,
+): Workspace {
+  if (workspacePath && existsSync(workspacePath)) {
+    return {
+      path: workspacePath,
+      cleanup: () => {},
+    };
+  }
+  return createIsolatedWorkspace(workspacesDir, logger);
+}
+
 /**
  * トークンを URL やコマンドラインに露出させず、
  * git の設定用環境変数で認証ヘッダを注入する (Git 2.31+)。
@@ -55,7 +78,10 @@ export async function prepareWorkspace(args: PrepareArgs): Promise<Workspace> {
   assertRepo(repo);
   assertSha(sha);
   mkdirSync(workspacesDir, { recursive: true });
-  const dir = join(workspacesDir, `${repo.replaceAll("/", "__")}-${sha.slice(0, 12)}-${Date.now()}`);
+  const dir = join(
+    workspacesDir,
+    `${repo.replaceAll("/", "__")}-${sha.slice(0, 12)}-${Date.now()}`,
+  );
 
   const authEnv = gitAuthEnv(githubToken);
   const execOpts = (cwd?: string) => ({
@@ -70,34 +96,33 @@ export async function prepareWorkspace(args: PrepareArgs): Promise<Workspace> {
   cloneArgs.push(repoUrl, dir);
 
   logger.debug({ dir, depth }, "git clone");
-  await execa("git", cloneArgs, execOpts());
+  try {
+    await execa("git", cloneArgs, execOpts());
 
-  // fork PR: head repo をリモートとして追加し、SHA を fetch
-  if (headRepoUrl) {
-    logger.debug({ headRepoUrl }, "adding fork remote");
-    await execa("git", ["remote", "add", "fork", headRepoUrl], execOpts(dir));
-    await execa("git", ["fetch", "--quiet", "--depth=200", "fork", sha], execOpts(dir));
-  } else {
-    await execa("git", ["fetch", "--quiet", "--depth=200", "origin", sha], execOpts(dir));
-  }
+    // fork PR: head repo をリモートとして追加し、SHA を fetch
+    if (headRepoUrl) {
+      logger.debug({ headRepoUrl }, "adding fork remote");
+      await execa("git", ["remote", "add", "fork", headRepoUrl], execOpts(dir));
+      await execa("git", ["fetch", "--quiet", "--depth=200", "fork", sha], execOpts(dir));
+    } else {
+      await execa("git", ["fetch", "--quiet", "--depth=200", "origin", sha], execOpts(dir));
+    }
 
-  await execa("git", ["checkout", "--quiet", sha], execOpts(dir));
+    await execa("git", ["checkout", "--quiet", sha], execOpts(dir));
 
-  // 実際の HEAD が期待 SHA と一致するか検証 (fail-fast)
-  const { stdout: actualSha } = await execa("git", ["rev-parse", "HEAD"], { cwd: dir });
-  if (!actualSha.startsWith(sha.slice(0, 12))) {
-    throw new Error(`SHA mismatch: expected ${sha}, got ${actualSha.trim()}`);
+    // 実際の HEAD が期待 SHA と一致するか検証 (fail-fast)
+    const { stdout: actualSha } = await execa("git", ["rev-parse", "HEAD"], { cwd: dir });
+    if (!actualSha.startsWith(sha.slice(0, 12))) {
+      throw new Error(`SHA mismatch: expected ${sha}, got ${actualSha.trim()}`);
+    }
+  } catch (err) {
+    cleanupWorkspace(dir, logger);
+    throw err;
   }
 
   return {
     path: dir,
-    cleanup: () => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch (err) {
-        logger.warn({ dir, err: (err as Error).message }, "workspace cleanup failed");
-      }
-    },
+    cleanup: () => cleanupWorkspace(dir, logger),
   };
 }
 
@@ -174,7 +199,12 @@ type PatternMatcher = RegExp | { literal: string };
 function compilePatterns(patterns: string[]): PatternMatcher[] {
   return patterns.map((p) => {
     if (p.includes("*")) {
-      return new RegExp(`^${p.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/(?<!\.\*)\*/g, "[^/]*")}$`);
+      return new RegExp(
+        `^${p
+          .replace(/\./g, "\\.")
+          .replace(/\*\*/g, ".*")
+          .replace(/(?<!\.\*)\*/g, "[^/]*")}$`,
+      );
     }
     return { literal: p };
   });
@@ -182,6 +212,16 @@ function compilePatterns(patterns: string[]): PatternMatcher[] {
 
 function matchAny(filePath: string, matchers: PatternMatcher[]): boolean {
   return matchers.some((m) =>
-    m instanceof RegExp ? m.test(filePath) : filePath === m.literal || filePath.startsWith(`${m.literal}/`),
+    m instanceof RegExp
+      ? m.test(filePath)
+      : filePath === m.literal || filePath.startsWith(`${m.literal}/`),
   );
+}
+
+function cleanupWorkspace(dir: string, logger: Logger): void {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    logger.warn({ dir, err: (err as Error).message }, "workspace cleanup failed");
+  }
 }
