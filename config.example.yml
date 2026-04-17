@@ -36,7 +36,7 @@ review:
     - package-lock.json
     - yarn.lock
 
-# GitHub へのフィードバック (GitHub App 認証 or GITHUB_TOKEN が必要)
+# GitHub へのフィードバック (GitHub App 認証で codex-review[bot] として投稿)
 github:
   # PR にレビューコメントとして投稿する
   prReviewComment: true
