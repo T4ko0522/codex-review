@@ -7,6 +7,7 @@ import type { ReviewJob, ThreadContext } from "../types.ts";
 import { splitArgs } from "../env.ts";
 import { runCodex } from "../review/codex.ts";
 import { buildFollowUpPrompt } from "../review/prompt.ts";
+import { getFollowUpWorkspace } from "../review/workspace.ts";
 import type { Store } from "../store/db.ts";
 import { assertTextChannel, publishReview, sendChunks } from "./publish.ts";
 
@@ -73,8 +74,15 @@ export class DiscordBot {
       content: markdown,
       createdAt: Date.now(),
     });
-    const now = Date.now();
-    this.deps.threadContext.set(thread.id, { job, workspacePath, createdAt: now, lastActivityAt: now });
+    if (workspacePath) {
+      const now = Date.now();
+      this.deps.threadContext.set(thread.id, {
+        job,
+        workspacePath,
+        createdAt: now,
+        lastActivityAt: now,
+      });
+    }
     return thread;
   }
 
@@ -109,14 +117,14 @@ export class DiscordBot {
 
     const history = store.listRecentMessages(thread.id, 20);
     const prompt = buildFollowUpPrompt(record.job, history, content);
-    const cwd = record.workspacePath ?? env.WORKSPACES_DIR;
+    const workspace = getFollowUpWorkspace(env.WORKSPACES_DIR, record.workspacePath, logger);
 
     let reply: string;
     try {
       reply = await runCodex({
         bin: env.CODEX_BIN,
         extraArgs: splitArgs(env.CODEX_EXTRA_ARGS),
-        cwd,
+        cwd: workspace.path,
         prompt,
         timeoutMs: env.CODEX_TIMEOUT_MS,
         logger,
@@ -124,6 +132,8 @@ export class DiscordBot {
     } catch (err) {
       logger.error({ err: (err as Error).message }, "codex follow-up failed");
       reply = `:warning: codex 実行に失敗しました。サーバーログを確認してください。`;
+    } finally {
+      workspace.cleanup();
     }
 
     store.addMessage({
