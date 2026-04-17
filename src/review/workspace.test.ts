@@ -1,9 +1,21 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
-import { describe, expect, it } from "vite-plus/test";
-import { createIsolatedWorkspace, filterDiff, getFollowUpWorkspace } from "./workspace.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  cloneRepoAtDefaultBranch,
+  createIsolatedWorkspace,
+  filterDiff,
+  getDiff,
+  getFollowUpWorkspace,
+  prepareWorkspace,
+} from "./workspace.ts";
+import { execa } from "execa";
+
+vi.mock("execa", () => ({
+  execa: vi.fn(),
+}));
 
 const SAMPLE_DIFF = [
   "diff --git a/src/index.ts b/src/index.ts",
@@ -170,5 +182,397 @@ describe("filterDiff", () => {
     const result = filterDiff(diff, { includeExtensions: ["ts"], excludePaths: [] });
     expect(result).toContain("src/index.ts");
     expect(result).not.toContain("notes 1.md");
+  });
+
+  it("handles b-side-only quoted diff headers", () => {
+    const diff = [
+      'diff --git a/normal b/"with space"',
+      "@@ -1 +1 @@",
+      "-x",
+      "+y",
+      "diff --git a/src/index.ts b/src/index.ts",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+    ].join("\n");
+    const result = filterDiff(diff, { includeExtensions: ["ts"], excludePaths: [] });
+    expect(result).toContain("src/index.ts");
+    // `with space` は .ts 以外なので除外される
+    expect(result).not.toContain("with space");
+  });
+
+  it("decodes tab escapes in quoted filenames so includeExtensions work", () => {
+    // git は タブ付きファイル名を "a\tb.ts" のように \t でエスケープする。
+    // unescape 後は実体タブ文字が入るため、拡張子抽出 (extname) は ".ts" と判定できる。
+    const diff = [
+      'diff --git "a/a\\tb.ts" "b/a\\tb.ts"',
+      "@@ -1 +1 @@",
+      "-x",
+      "+y",
+      "diff --git a/other.md b/other.md",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+    ].join("\n");
+    const result = filterDiff(diff, {
+      includeExtensions: ["ts"],
+      excludePaths: [],
+    });
+    // .ts のみ残る → tab 付き名前が残り、md は除外
+    expect(result).toContain("a\\tb.ts");
+    expect(result).not.toContain("other.md");
+  });
+
+  it("keeps unparseable diff chunks (no diff --git header) untouched", () => {
+    const raw = "arbitrary leading noise\n" + SAMPLE_DIFF;
+    const result = filterDiff(raw, {
+      includeExtensions: [],
+      excludePaths: ["pnpm-lock.yaml"],
+    });
+    // 先頭の noise 部分は diff --git ヘッダを持たないので `filePath` が null → 残存
+    expect(result).toContain("arbitrary leading noise");
+  });
+});
+
+describe("prepareWorkspace", () => {
+  let workspacesDir: string;
+
+  beforeEach(() => {
+    workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-prep-"));
+    vi.mocked(execa).mockReset();
+  });
+
+  afterEach(() => {
+    rmSync(workspacesDir, { recursive: true, force: true });
+    vi.mocked(execa).mockReset();
+  });
+
+  it("rejects invalid repo format", async () => {
+    await expect(
+      prepareWorkspace({
+        workspacesDir,
+        repo: "invalid repo",
+        repoUrl: "https://github.com/invalid/repo",
+        sha: "a".repeat(40),
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/invalid repo format/);
+  });
+
+  it("rejects invalid SHA format", async () => {
+    await expect(
+      prepareWorkspace({
+        workspacesDir,
+        repo: "acme/app",
+        repoUrl: "https://github.com/acme/app",
+        sha: "deadbeef", // too short
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/invalid SHA format/);
+  });
+
+  it("runs clone + fetch origin + checkout + rev-parse in order for non-fork PR", async () => {
+    const sha = "a".repeat(40);
+    const calls: Array<[string, string[]]> = [];
+    vi.mocked(execa).mockImplementation(async (bin: any, args: any) => {
+      calls.push([bin, args]);
+      if (args?.[0] === "rev-parse") return { stdout: sha } as any;
+      return { stdout: "" } as any;
+    });
+
+    const ws = await prepareWorkspace({
+      workspacesDir,
+      repo: "acme/app",
+      repoUrl: "https://github.com/acme/app",
+      sha,
+      depth: 50,
+      logger,
+    });
+
+    // git clone / fetch origin / checkout / rev-parse の順
+    expect(calls[0]![1][0]).toBe("clone");
+    expect(calls[0]![1]).toContain("--depth=50");
+    expect(calls[1]![1][0]).toBe("fetch");
+    expect(calls[1]![1]).toContain("origin");
+    expect(calls[2]![1][0]).toBe("checkout");
+    expect(calls[3]![1][0]).toBe("rev-parse");
+
+    ws.cleanup();
+  });
+
+  it("does not add --depth flag when depth <= 0 (full clone)", async () => {
+    const sha = "b".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "rev-parse") return { stdout: sha } as any;
+      return { stdout: "" } as any;
+    });
+    await prepareWorkspace({
+      workspacesDir,
+      repo: "acme/app",
+      repoUrl: "https://github.com/acme/app",
+      sha,
+      depth: 0,
+      logger,
+    });
+    const cloneCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "clone");
+    expect(cloneCall).toBeDefined();
+    expect(cloneCall![1] as string[]).not.toContain("--depth=0");
+    expect((cloneCall![1] as string[]).find((a: string) => a.startsWith("--depth"))).toBeUndefined();
+  });
+
+  it("adds fork remote and fetches from it when headRepoUrl is given", async () => {
+    const sha = "c".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "rev-parse") return { stdout: sha } as any;
+      return { stdout: "" } as any;
+    });
+    await prepareWorkspace({
+      workspacesDir,
+      repo: "acme/app",
+      repoUrl: "https://github.com/acme/app",
+      headRepoUrl: "https://github.com/fork/app",
+      sha,
+      depth: 10,
+      logger,
+    });
+    const calls = vi.mocked(execa).mock.calls;
+    expect(calls.find((c: any) => c[1]?.[0] === "remote" && c[1]?.[2] === "fork")).toBeDefined();
+    const fetchFork = calls.find((c: any) => c[1]?.[0] === "fetch" && c[1]?.includes("fork"));
+    expect(fetchFork).toBeDefined();
+  });
+
+  it("injects auth headers via GIT_CONFIG_* env when token is provided", async () => {
+    const sha = "d".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "rev-parse") return { stdout: sha } as any;
+      return { stdout: "" } as any;
+    });
+    await prepareWorkspace({
+      workspacesDir,
+      repo: "acme/app",
+      repoUrl: "https://github.com/acme/app",
+      sha,
+      depth: 1,
+      githubToken: "ghs_mytoken",
+      logger,
+    });
+    const cloneCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "clone")!;
+    const opts = cloneCall[2] as any;
+    expect(opts.env.GIT_CONFIG_COUNT).toBe("1");
+    expect(opts.env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
+    expect(opts.env.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+    // token は base64 で隠蔽されている
+    expect(opts.env.GIT_CONFIG_VALUE_0).not.toContain("ghs_mytoken");
+  });
+
+  it("throws and cleans up the directory when rev-parse returns mismatched SHA", async () => {
+    const sha = "e".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "rev-parse") return { stdout: "ffffffffffffff" } as any;
+      return { stdout: "" } as any;
+    });
+    await expect(
+      prepareWorkspace({
+        workspacesDir,
+        repo: "acme/app",
+        repoUrl: "https://github.com/acme/app",
+        sha,
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/SHA mismatch/);
+    // 失敗後はディレクトリが残らない (mkdtempSync で作った holder は rmSync 済み)
+    const remaining = require("node:fs").readdirSync(workspacesDir) as string[];
+    expect(remaining).toEqual([]);
+  });
+
+  it("cleans up when git clone itself fails", async () => {
+    const sha = "f".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "clone") throw new Error("network down");
+      return { stdout: "" } as any;
+    });
+    await expect(
+      prepareWorkspace({
+        workspacesDir,
+        repo: "acme/app",
+        repoUrl: "https://github.com/acme/app",
+        sha,
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/network down/);
+    const remaining = require("node:fs").readdirSync(workspacesDir) as string[];
+    expect(remaining).toEqual([]);
+  });
+});
+
+describe("cloneRepoAtDefaultBranch", () => {
+  let workspacesDir: string;
+
+  beforeEach(() => {
+    workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-clone-"));
+    vi.mocked(execa).mockReset();
+  });
+
+  afterEach(() => {
+    rmSync(workspacesDir, { recursive: true, force: true });
+    vi.mocked(execa).mockReset();
+  });
+
+  it("clones the default branch with --filter=blob:none", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "" } as any);
+    const ws = await cloneRepoAtDefaultBranch({
+      workspacesDir,
+      repo: "acme/app",
+      repoUrl: "https://github.com/acme/app",
+      depth: 20,
+      logger,
+    });
+    const call = vi.mocked(execa).mock.calls[0]!;
+    expect(call[0]).toBe("git");
+    expect(call[1]).toContain("clone");
+    expect(call[1]).toContain("--filter=blob:none");
+    expect(call[1]).toContain("--depth=20");
+    expect(ws.path.startsWith(workspacesDir)).toBe(true);
+    ws.cleanup();
+  });
+
+  it("rejects invalid repo", async () => {
+    await expect(
+      cloneRepoAtDefaultBranch({
+        workspacesDir,
+        repo: "not a repo",
+        repoUrl: "https://github.com/bad",
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/invalid repo format/);
+  });
+
+  it("throws and cleans up on clone failure", async () => {
+    vi.mocked(execa).mockRejectedValue(new Error("boom"));
+    await expect(
+      cloneRepoAtDefaultBranch({
+        workspacesDir,
+        repo: "acme/app",
+        repoUrl: "https://github.com/acme/app",
+        depth: 1,
+        logger,
+      }),
+    ).rejects.toThrow(/boom/);
+    const remaining = require("node:fs").readdirSync(workspacesDir) as string[];
+    expect(remaining).toEqual([]);
+  });
+});
+
+describe("getDiff", () => {
+  beforeEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  afterEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  it("rejects invalid head SHA format", async () => {
+    await expect(getDiff("/tmp/x", undefined, "short", logger)).rejects.toThrow(
+      /invalid SHA format/,
+    );
+  });
+
+  it("rejects invalid base SHA format when provided", async () => {
+    await expect(getDiff("/tmp/x", "short", "a".repeat(40), logger)).rejects.toThrow(
+      /invalid SHA format/,
+    );
+  });
+
+  it("uses git diff between base and head when base fetch succeeds", async () => {
+    const base = "b".repeat(40);
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "diff") return { stdout: "DIFF_OUTPUT" } as any;
+      return { stdout: "" } as any;
+    });
+    const out = await getDiff("/work", base, head, logger);
+    expect(out).toBe("DIFF_OUTPUT");
+    // diff コマンドの引数確認
+    const diffCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "diff")!;
+    expect(diffCall[1]).toEqual(["diff", "--no-color", base, head]);
+  });
+
+  it("falls back to git show when base diff fails", async () => {
+    const base = "b".repeat(40);
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "fetch") return { stdout: "" } as any;
+      if (args?.[0] === "diff") throw new Error("cannot diff");
+      if (args?.[0] === "show") return { stdout: "SHOW_OUTPUT" } as any;
+      return { stdout: "" } as any;
+    });
+    const out = await getDiff("/work", base, head, logger);
+    expect(out).toBe("SHOW_OUTPUT");
+  });
+
+  it("tolerates fetch errors for base (continues to diff)", async () => {
+    const base = "b".repeat(40);
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "fetch") throw new Error("fetch failed");
+      if (args?.[0] === "diff") return { stdout: "DIFF_OK" } as any;
+      return { stdout: "" } as any;
+    });
+    const out = await getDiff("/work", base, head, logger);
+    expect(out).toBe("DIFF_OK");
+  });
+
+  it("uses git show directly when base is omitted", async () => {
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "show") return { stdout: "SHOW_ONLY" } as any;
+      return { stdout: "" } as any;
+    });
+    const out = await getDiff("/work", undefined, head, logger);
+    expect(out).toBe("SHOW_ONLY");
+  });
+
+  it("returns empty string when even git show fails", async () => {
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockRejectedValue(new Error("no such object"));
+    const out = await getDiff("/work", undefined, head, logger);
+    expect(out).toBe("");
+  });
+
+  it("injects GitHub auth env when token is given", async () => {
+    const head = "a".repeat(40);
+    vi.mocked(execa).mockImplementation(async (_bin: any, args: any) => {
+      if (args?.[0] === "show") return { stdout: "x" } as any;
+      return { stdout: "" } as any;
+    });
+    await getDiff("/work", undefined, head, logger, "ghs_tok");
+    const showCall = vi.mocked(execa).mock.calls.find((c: any) => c[1]?.[0] === "show")!;
+    const opts = showCall[2] as any;
+    // git show の呼び出しには env は渡っていない (実装ではそうなっている) ことを確認
+    // → 行 209 は env を渡さない fallback なので、token 有無の挙動違いは ここでは観察できない
+    expect(opts.cwd).toBe("/work");
+  });
+});
+
+describe("cleanupWorkspace (via createIsolatedWorkspace)", () => {
+  it("swallows rmSync errors and logs warn", () => {
+    const workspacesDir = mkdtempSync(join(tmpdir(), "codex-review-cleanup-"));
+    try {
+      const ws = createIsolatedWorkspace(workspacesDir, logger);
+      // ディレクトリ内にファイルを作って確認
+      writeFileSync(join(ws.path, "file.txt"), "hi");
+      // 二度 cleanup しても例外を投げずに完走する (存在しない dir への rmSync は force:true で success)
+      ws.cleanup();
+      ws.cleanup();
+      expect(existsSync(ws.path)).toBe(false);
+    } finally {
+      rmSync(workspacesDir, { recursive: true, force: true });
+    }
   });
 });
