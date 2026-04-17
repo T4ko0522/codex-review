@@ -90,20 +90,20 @@ docker compose logs -f codex-review
 
 3 つのサブキーそれぞれに `enabled` と発火制御オプションを持ちます。
 
-| キー                               | デフォルト        | 説明                                                                                   |
-| ---------------------------------- | ----------------- | -------------------------------------------------------------------------------------- |
-| `events.push.enabled`              | `true`            | push イベントを処理する                                                                |
-| `events.push.mode`                 | `protected-only`  | `all` = 全 push を自動レビュー / `protected-only` = Protected Branch のみ              |
-| `events.pull_request.enabled`      | `true`            | PR イベントを処理する                                                                  |
-| `events.pull_request.autoReviewOn` | `["opened"]`      | 自動レビューする action 一覧。含まれない action は mention 待ち                        |
-| `events.issues.enabled`            | `true`            | Issue イベントを処理する                                                               |
-| `events.issues.autoReviewOn`       | `[]`              | 空なら全て mention 待ち。`opened` などを入れると自動起動                                |
+| キー                               | デフォルト       | 説明                                                                      |
+| ---------------------------------- | ---------------- | ------------------------------------------------------------------------- |
+| `events.push.enabled`              | `true`           | push イベントを処理する                                                   |
+| `events.push.mode`                 | `protected-only` | `all` = 全 push を自動レビュー / `protected-only` = Protected Branch のみ |
+| `events.pull_request.enabled`      | `true`           | PR イベントを処理する                                                     |
+| `events.pull_request.autoReviewOn` | `["opened"]`     | 自動レビューする action 一覧。含まれない action は mention 待ち           |
+| `events.issues.enabled`            | `true`           | Issue イベントを処理する                                                  |
+| `events.issues.autoReviewOn`       | `[]`             | 空なら全て mention 待ち。`opened` などを入れると自動起動                  |
 
 ### mention
 
-| キー                | デフォルト              | 説明                                                                                    |
-| ------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
-| `mention.triggers`  | `["@CodexRabbit[bot]"]` | PR/Issue コメント本文にこれらの文字列が含まれるとレビュー実行。空配列で mention 機能 OFF |
+| キー               | デフォルト              | 説明                                                                                     |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
+| `mention.triggers` | `["@CodexRabbit[bot]"]` | PR/Issue コメント本文にこれらの文字列が含まれるとレビュー実行。空配列で mention 機能 OFF |
 
 ### filters
 
@@ -125,11 +125,11 @@ docker compose logs -f codex-review
 
 ### github
 
-| キー                | デフォルト | 説明                                                 |
-| ------------------- | ---------- | ---------------------------------------------------- |
-| `prReviewComment`   | `true`     | PR にレビューコメントを投稿                          |
-| `pushCommitComment` | `true`     | push レビュー時に head コミットへコメントを投稿       |
-| `pushIssueOnSevere` | `true`     | push で Critical/High 検出時に Issue を自動作成      |
+| キー                | デフォルト | 説明                                            |
+| ------------------- | ---------- | ----------------------------------------------- |
+| `prReviewComment`   | `true`     | PR にレビューコメントを投稿                     |
+| `pushCommitComment` | `true`     | push レビュー時に head コミットへコメントを投稿 |
+| `pushIssueOnSevere` | `true`     | push で Critical/High 検出時に Issue を自動作成 |
 
 ### discord
 
@@ -141,8 +141,8 @@ docker compose logs -f codex-review
 
 ### workspace
 
-| キー         | デフォルト | 説明                                                                           |
-| ------------ | ---------- | ------------------------------------------------------------------------------ |
+| キー         | デフォルト | 説明                                                                                  |
+| ------------ | ---------- | ------------------------------------------------------------------------------------- |
 | `ttlMinutes` | `1440`     | 非活性スレッドに紐づく clone ディレクトリを自動回収するまでの分数 (10 分間隔で sweep) |
 
 ## GitHub フィードバック
@@ -162,11 +162,11 @@ docker compose logs -f codex-review
 
 ### workspace のライフサイクル
 
-| 状態               | 挙動                                                                                                |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
+| 状態               | 挙動                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
 | **通常運用**       | 最後の活動から `workspace.ttlMinutes` 経過で自動削除 (10 分間隔スイープ)。会話中は TTL リセット |
-| **プロセス再起動** | 全 workspace 消失。会話履歴は SQLite に残るが、実ファイル参照なしの応答になる                       |
-| **異常終了**       | `WORKSPACES_DIR` にディレクトリが残る。手動削除が必要                                               |
+| **プロセス再起動** | 全 workspace 消失。会話履歴は SQLite に残るが、実ファイル参照なしの応答になる                   |
+| **異常終了**       | `WORKSPACES_DIR` にディレクトリが残る。手動削除が必要                                           |
 
 ## 開発
 
