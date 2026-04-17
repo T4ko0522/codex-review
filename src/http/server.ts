@@ -1,3 +1,4 @@
+import type { Octokit } from "@octokit/rest";
 import Fastify from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "../config.ts";
@@ -7,10 +8,11 @@ import type { Logger } from "../logger.ts";
 import { buildDedupKey } from "../review/dedup.ts";
 import type { EventKind, IncomingWebhook, ReviewJob } from "../types.ts";
 import { buildJobFromPayload } from "../github/events.ts";
+import { isBranchProtected } from "../github/client.ts";
 import { verifySignature } from "./verify.ts";
 
 const IncomingSchema = z.object({
-  event: z.enum(["push", "pull_request", "issues"]),
+  event: z.enum(["push", "pull_request", "issues", "issue_comment"]),
   repository: z.string(),
   sender: z.string().optional().default(""),
   deliveredAt: z.string().optional(),
@@ -28,6 +30,11 @@ export interface StartServerDeps {
   logger: Logger;
   enqueue: (job: ReviewJob) => void;
   /**
+   * Protected Branch 判定や mention 由来 PR の sha 補完に使う。
+   * 未指定の場合、protected-only モードは常にスキップ扱い、mention 経由 PR はレビュー不可。
+   */
+  octokit?: Octokit;
+  /**
    * 重複レビュー防止: 同一キーで再送された場合は false を返してスキップさせる。
    * 未指定なら dedup を行わない。
    */
@@ -39,6 +46,7 @@ export async function startServer({
   config,
   logger,
   enqueue,
+  octokit,
   tryRegisterReview,
 }: StartServerDeps) {
   const app = Fastify({
@@ -89,10 +97,16 @@ export async function startServer({
       return reply.code(202).send({ ok: true, skipped: "repo-filtered" });
     }
 
-    const job = buildJobFromPayload(data);
+    const job = buildJobFromPayload(data, { mentionTriggers: config.mention.triggers });
     if (!job) {
       logger.info({ event: data.event }, "payload ignored");
       return reply.code(202).send({ ok: true, skipped: "payload-ignored" });
+    }
+
+    // mention 由来で対応する event が無効化されているなら skip
+    if (job.triggeredBy === "mention" && !config.events[job.kind].enabled) {
+      logger.info({ kind: job.kind }, "mention target event disabled, skip");
+      return reply.code(202).send({ ok: true, skipped: "event-disabled" });
     }
 
     if (config.filters.skipBotSenders && /\[bot\]$/i.test(job.sender)) {
@@ -103,7 +117,82 @@ export async function startServer({
       logger.info({ ref: job.ref }, "branch filtered, skip");
       return reply.code(202).send({ ok: true, skipped: "branch-filtered" });
     }
-    if (job.kind === "pull_request" && config.filters.skipDraftPullRequests && job.isDraft) {
+
+    // push: protected-only モードなら GitHub API で保護状態を確認
+    if (job.kind === "push" && config.events.push.mode === "protected-only") {
+      const branch = (job.ref ?? "").replace(/^refs\/heads\//, "");
+      const [owner, repoName] = job.repo.split("/");
+      if (!octokit || !owner || !repoName || !branch) {
+        logger.info(
+          { repo: job.repo, branch, hasOctokit: Boolean(octokit) },
+          "cannot check branch protection, skip",
+        );
+        return reply.code(202).send({ ok: true, skipped: "non-protected" });
+      }
+      const ok = await isBranchProtected(octokit, owner, repoName, branch, logger);
+      if (!ok) {
+        logger.info({ repo: job.repo, branch }, "non-protected branch, skip");
+        return reply.code(202).send({ ok: true, skipped: "non-protected" });
+      }
+    }
+
+    // PR: 自動レビュー対象の action でない & mention 由来でないなら skip
+    if (job.kind === "pull_request" && job.triggeredBy !== "mention") {
+      const auto = config.events.pull_request.autoReviewOn;
+      if (job.action && !auto.includes(job.action)) {
+        logger.info({ pr: job.number, action: job.action }, "PR action not auto, skip");
+        return reply.code(202).send({ ok: true, skipped: "pr-not-auto" });
+      }
+    }
+
+    // Issue: 自動レビュー対象の action でない & mention 由来でないなら skip
+    if (job.kind === "issues" && job.triggeredBy !== "mention") {
+      const auto = config.events.issues.autoReviewOn;
+      if (job.action && !auto.includes(job.action)) {
+        logger.info({ issue: job.number, action: job.action }, "issue action not auto, skip");
+        return reply.code(202).send({ ok: true, skipped: "issue-not-auto" });
+      }
+    }
+
+    // mention 経由の PR は sha/baseSha が payload に無いので pulls.get で補完
+    if (job.kind === "pull_request" && job.triggeredBy === "mention") {
+      if (!octokit || !job.number) {
+        logger.warn({ pr: job.number }, "cannot fetch PR details for mention");
+        return reply.code(202).send({ ok: true, skipped: "pr-fetch-unavailable" });
+      }
+      const [owner, repoName] = job.repo.split("/");
+      if (!owner || !repoName) {
+        return reply.code(202).send({ ok: true, skipped: "pr-fetch-unavailable" });
+      }
+      try {
+        const res = await octokit.rest.pulls.get({
+          owner,
+          repo: repoName,
+          pull_number: job.number,
+        });
+        job.sha = res.data.head.sha;
+        job.baseSha = res.data.base.sha;
+        job.ref = res.data.head.ref;
+        job.baseRef = res.data.base.ref;
+        job.isDraft = Boolean(res.data.draft);
+        const headRepoFullName = res.data.head.repo?.full_name;
+        if (headRepoFullName && headRepoFullName !== job.repo) {
+          job.headRepoUrl = `https://github.com/${headRepoFullName}`;
+        }
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, pr: job.number },
+          "failed to fetch PR details for mention",
+        );
+        return reply.code(202).send({ ok: true, skipped: "pr-fetch-failed" });
+      }
+    }
+
+    if (
+      job.kind === "pull_request" &&
+      config.filters.skipDraftPullRequests &&
+      job.isDraft
+    ) {
       logger.info({ pr: job.number }, "draft PR, skip");
       return reply.code(202).send({ ok: true, skipped: "draft-pr" });
     }
@@ -121,7 +210,13 @@ export async function startServer({
 
     enqueue(job);
     logger.info(
-      { kind: job.kind, repo: job.repo, ref: job.ref, number: job.number },
+      {
+        kind: job.kind,
+        repo: job.repo,
+        ref: job.ref,
+        number: job.number,
+        triggeredBy: job.triggeredBy,
+      },
       "job enqueued",
     );
     return reply.code(202).send({ ok: true, queued: true });
@@ -133,5 +228,11 @@ export async function startServer({
 }
 
 function isEventEnabled(config: AppConfig, event: EventKind): boolean {
-  return config.events[event] === true;
+  if (event === "issue_comment") {
+    // mention を拾うには triggers が設定されていて、かつ発火先 (PR/issues) が
+    // いずれか enabled である必要がある
+    if (config.mention.triggers.length === 0) return false;
+    return config.events.pull_request.enabled || config.events.issues.enabled;
+  }
+  return config.events[event].enabled;
 }

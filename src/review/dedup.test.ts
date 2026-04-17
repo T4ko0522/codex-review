@@ -57,4 +57,42 @@ describe("buildDedupKey", () => {
     const job = baseJob({ kind: "issues", title: "Bug", body: "X" });
     expect(buildDedupKey(job)).toBeNull();
   });
+
+  it("builds a mention key using commentId", () => {
+    const job = baseJob({
+      kind: "issues",
+      number: 7,
+      triggeredBy: "mention",
+      commentId: 9999,
+    });
+    expect(buildDedupKey(job)).toBe("mention:acme/app:issues:7:9999");
+  });
+
+  it("mention key differs per commentId even with same issue", () => {
+    const a = baseJob({ kind: "issues", number: 7, triggeredBy: "mention", commentId: 1 });
+    const b = baseJob({ kind: "issues", number: 7, triggeredBy: "mention", commentId: 2 });
+    expect(buildDedupKey(a)).not.toBe(buildDedupKey(b));
+  });
+
+  it("mention key separates pull_request and issues even with same number/comment", () => {
+    const pr = baseJob({
+      kind: "pull_request",
+      number: 42,
+      sha: "head1",
+      triggeredBy: "mention",
+      commentId: 500,
+    });
+    const iss = baseJob({
+      kind: "issues",
+      number: 42,
+      triggeredBy: "mention",
+      commentId: 500,
+    });
+    expect(buildDedupKey(pr)).not.toBe(buildDedupKey(iss));
+  });
+
+  it("returns null for mention without commentId", () => {
+    const job = baseJob({ kind: "issues", number: 7, triggeredBy: "mention" });
+    expect(buildDedupKey(job)).toBeNull();
+  });
 });
