@@ -36,7 +36,12 @@ async function main() {
       logger.info({ repo: job.repo, kind: job.kind, number: job.number }, "review starting");
       const dedupKey = buildDedupKey(job);
       try {
-        const result = await runReview(job, { env, config, logger, githubToken: gh.token });
+        const result = await runReview(job, {
+          env,
+          config,
+          logger,
+          githubToken: await gh.getToken(),
+        });
 
         // GitHub フィードバック (best-effort、エラーは内部で吸収)
         if (config.github.prReviewComment && job.kind === "pull_request") {
