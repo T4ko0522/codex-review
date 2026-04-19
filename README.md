@@ -1,6 +1,6 @@
 # Codex Rabbit
 
-GitHub の push / pull_request / issues / issue_comment を契機に **Codex CLI** でコードレビューを実行し、**GitHub** (PR コメント / コミットコメント / Issue 自動作成) と **Discord** (スレッド投稿 + 対話) の両方にフィードバックする Bot です。
+GitHub の push / pull_request / issues / issue_comment を契機に **Codex CLI** でコードレビューを実行し、**GitHub** (PR コメント / コミットコメント / Issue 自動作成) と **Discord** (スレッド投稿 + 対話) の両方にフィードバックする AI Review Assistant です。
 
 ## デプロイ
 
@@ -21,7 +21,7 @@ GitHub の push / pull_request / issues / issue_comment を契機に **Codex CLI
 
 いずれも best-effort で動作し、GitHub API エラーは Discord 投稿やキュー処理をブロックしません。
 
-## スレッド内での対話
+## Discordでの対話
 
 レビュー投稿後、Discord にスレッドが自動作成されます。スレッド内にメッセージを書くと、Bot が会話履歴と clone 済みリポジトリを Codex に渡して応答します。
 
