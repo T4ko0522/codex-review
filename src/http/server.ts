@@ -97,19 +97,33 @@ export async function startServer({
       return reply.code(202).send({ ok: true, skipped: "repo-filtered" });
     }
 
-    const job = buildJobFromPayload(data, { mentionTriggers: config.mention.triggers });
+    const job = buildJobFromPayload(data, {
+      mentionTriggers: config.mention.triggers,
+      fixMentionTriggers: config.mention.fixTriggers,
+      // autoFixOnSevereIssue=false の場合はラベル判定を無効化し、通常の Issue レビューに流す
+      autoFixIssueLabel: config.github.autoFixOnSevereIssue
+        ? config.github.autoFixIssueLabel
+        : undefined,
+    });
     if (!job) {
       logger.info({ event: data.event }, "payload ignored");
       return reply.code(202).send({ ok: true, skipped: "payload-ignored" });
     }
 
-    // mention 由来で対応する event が無効化されているなら skip
-    if (job.triggeredBy === "mention" && !config.events[job.kind].enabled) {
-      logger.info({ kind: job.kind }, "mention target event disabled, skip");
-      return reply.code(202).send({ ok: true, skipped: "event-disabled" });
+    // mention 由来で対応する event が無効化されているなら skip。
+    // fix は issues イベントの派生として扱う (events.issues.enabled に従う)。
+    if (job.triggeredBy === "mention") {
+      const targetEnabled =
+        job.kind === "fix" ? config.events.issues.enabled : config.events[job.kind].enabled;
+      if (!targetEnabled) {
+        logger.info({ kind: job.kind }, "mention target event disabled, skip");
+        return reply.code(202).send({ ok: true, skipped: "event-disabled" });
+      }
     }
 
-    if (config.filters.skipBotSenders && /\[bot\]$/i.test(job.sender)) {
+    // fix はラベル/明示 mention で意図的にトリガーされるため bot 起票でも通す。
+    // (push レビューの自動 Issue 化 → 自動 fix の流れを成立させるのに必要)
+    if (config.filters.skipBotSenders && job.kind !== "fix" && /\[bot\]$/i.test(job.sender)) {
       logger.info({ sender: job.sender }, "bot sender, skip");
       return reply.code(202).send({ ok: true, skipped: "bot-sender" });
     }

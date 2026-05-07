@@ -155,9 +155,11 @@ export class DiscordBot {
   private recreateJobFromRecord(r: {
     repo: string;
     sha?: string;
-    kind: "push" | "pull_request" | "issues";
+    kind: "push" | "pull_request" | "issues" | "fix";
     number?: number;
   }): ReviewJob {
+    // Issue 派生 (issues / fix) は Issue URL、PR は pull URL、push はリポジトリ URL
+    const isIssueLike = r.kind === "issues" || r.kind === "fix";
     return {
       kind: r.kind,
       repo: r.repo,
@@ -166,11 +168,11 @@ export class DiscordBot {
       title:
         r.kind === "pull_request"
           ? `PR #${r.number}`
-          : r.kind === "issues"
+          : isIssueLike
             ? `Issue #${r.number}`
             : `push @ ${r.sha?.slice(0, 7) ?? ""}`,
       htmlUrl: r.number
-        ? `https://github.com/${r.repo}/${r.kind === "issues" ? "issues" : "pull"}/${r.number}`
+        ? `https://github.com/${r.repo}/${isIssueLike ? "issues" : "pull"}/${r.number}`
         : `https://github.com/${r.repo}`,
       sender: "unknown",
       number: r.number,

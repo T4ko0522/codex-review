@@ -14,6 +14,7 @@ import {
 import { startServer } from "./http/server.ts";
 import { JobQueue } from "./queue/queue.ts";
 import { buildDedupKey } from "./review/dedup.ts";
+import { runFix } from "./review/fixer.ts";
 import { runReview } from "./review/runner.ts";
 import { Store } from "./store/db.ts";
 import type { ThreadContext } from "./types.ts";
@@ -52,6 +53,30 @@ async function main() {
       logger.info({ repo: job.repo, kind: job.kind, number: job.number }, "review starting");
       const dedupKey = buildDedupKey(job);
       try {
+        if (job.kind === "fix") {
+          // 自動 fix: clone → 編集 → push → PR 作成までを runFix が行う。
+          // PR 本文 / Issue コメントは runFix 内で投稿済み。Discord にはサマリのみ流す。
+          const result = await runFix(job, {
+            env,
+            config,
+            logger,
+            octokit: gh.octokit,
+            githubToken: await gh.getToken(),
+          });
+          try {
+            if (bot) {
+              const summary = result.prUrl
+                ? `${result.markdown}\n\n---\n対応 PR: ${result.prUrl}`
+                : result.markdown;
+              // workspace は対話で参照する用途が薄い (PR 提出後の clone) ため保持しない。
+              await bot.publish(job, summary, undefined);
+            }
+          } finally {
+            result.cleanup?.();
+          }
+          return;
+        }
+
         const result = await runReview(job, {
           env,
           config,

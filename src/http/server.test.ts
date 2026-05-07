@@ -550,6 +550,26 @@ describe("HTTP server - mention via issue_comment", () => {
     );
   });
 
+  it("enqueues fix-mention job from Issue comment with fix trigger", async () => {
+    const body = makeIssueCommentBody({
+      body: "@CodexRabbit[bot] fix this",
+      isPr: false,
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "content-type": "application/json",
+        "x-codex-review-signature": sign(body),
+      },
+      body,
+    });
+    expect(res.json()).toEqual({ ok: true, queued: true });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.kind).toBe("fix");
+    expect(enqueued[0]!.triggeredBy).toBe("mention");
+  });
+
   it("skips PR mention when pulls.get fails", async () => {
     await app.close();
     const pullsGet = vi.fn().mockRejectedValue(new Error("boom"));
@@ -576,5 +596,112 @@ describe("HTTP server - mention via issue_comment", () => {
     });
     expect(res.json().skipped).toBe("pr-fetch-failed");
     expect(enqueued).toHaveLength(0);
+  });
+});
+
+describe("HTTP server - auto fix routing", () => {
+  function makeIssueOpenedBody(labels: Array<{ name: string } | string>, sender = "carol") {
+    return JSON.stringify({
+      event: "issues",
+      repository: "acme/app",
+      sender,
+      payload: {
+        action: "opened",
+        issue: {
+          number: 7,
+          title: "Bug",
+          body: "steps",
+          html_url: "https://github.com/acme/app/issues/7",
+          user: { login: sender },
+          labels,
+        },
+      },
+    });
+  }
+
+  it("routes opened Issue with codex-review label to a fix/auto job", async () => {
+    const body = makeIssueOpenedBody([{ name: "codex-review" }]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "content-type": "application/json",
+        "x-codex-review-signature": sign(body),
+      },
+      body,
+    });
+    expect(res.json()).toEqual({ ok: true, queued: true });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.kind).toBe("fix");
+    expect(enqueued[0]!.triggeredBy).toBe("auto");
+  });
+
+  it("does NOT skip a bot-sender fix job (codex-review label takes precedence)", async () => {
+    const body = makeIssueOpenedBody([{ name: "codex-review" }], "ai-bot[bot]");
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "content-type": "application/json",
+        "x-codex-review-signature": sign(body),
+      },
+      body,
+    });
+    expect(res.json()).toEqual({ ok: true, queued: true });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.kind).toBe("fix");
+    // bot 起票でも fix は通る
+  });
+
+  it("falls back to issue-not-auto when an unlabeled Issue arrives outside autoReviewOn", async () => {
+    await app.close();
+    app = await startServer({
+      env: baseEnv,
+      config: {
+        ...baseConfig,
+        events: { ...baseConfig.events, issues: { enabled: true, autoReviewOn: [] } },
+      },
+      logger,
+      enqueue: (job) => enqueued.push(job),
+    });
+    const body = makeIssueOpenedBody([{ name: "bug" }]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "content-type": "application/json",
+        "x-codex-review-signature": sign(body),
+      },
+      body,
+    });
+    expect(res.json().skipped).toBe("issue-not-auto");
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("does not auto-fix when github.autoFixOnSevereIssue is false", async () => {
+    await app.close();
+    app = await startServer({
+      env: baseEnv,
+      config: {
+        ...baseConfig,
+        github: { ...baseConfig.github, autoFixOnSevereIssue: false },
+      },
+      logger,
+      enqueue: (job) => enqueued.push(job),
+    });
+    const body = makeIssueOpenedBody([{ name: "codex-review" }]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "content-type": "application/json",
+        "x-codex-review-signature": sign(body),
+      },
+      body,
+    });
+    // 通常 issue として処理される
+    expect(res.json()).toEqual({ ok: true, queued: true });
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]!.kind).toBe("issues");
   });
 });

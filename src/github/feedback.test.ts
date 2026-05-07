@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import pino from "pino";
 import {
+  createFixPullRequest,
   createPushIssue,
   hasSevereFindings,
   postCommitComment,
+  postFixCommentOnIssue,
+  postFixNoChangeComment,
   postIssueComment,
   postPrReview,
 } from "./feedback.ts";
@@ -292,7 +295,87 @@ describe("createPushIssue", () => {
         labels: ["codex-review"],
       }),
     );
-    expect(create.mock.calls[0]![0].title).toContain("main");
+    // 概要が無い → 最初の指摘 (file:line) を使う
+    expect(create.mock.calls[0]![0].title).toMatch(/^\[codex-review\]/);
+    expect(create.mock.calls[0]![0].title).toContain("file:1");
+  });
+
+  it("derives title from ## 概要 section content", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 99 } });
+    const octokit = { rest: { issues: { create } } } as any;
+    const md = [
+      "## 概要",
+      "認証ミドルウェアでセッション ID をログに出力しており、漏えいリスクがある。",
+      "",
+      "## 主要な指摘",
+      "### src/auth.ts:42 重大度: Critical",
+      "詳細",
+    ].join("\n");
+    await createPushIssue(octokit, makePushJob(), md, logger);
+    const title = create.mock.calls[0]![0].title as string;
+    expect(title.startsWith("[codex-review]")).toBe(true);
+    expect(title).toContain("認証ミドルウェア");
+  });
+
+  it("compresses multi-line 概要 to a single line", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 1 } });
+    const octokit = { rest: { issues: { create } } } as any;
+    const md = [
+      "## 概要",
+      "1 行目の要約。",
+      "2 行目の補足。",
+      "",
+      "## 主要な指摘",
+      "### a:1 重大度: High",
+      "x",
+    ].join("\n");
+    await createPushIssue(octokit, makePushJob(), md, logger);
+    const title = create.mock.calls[0]![0].title as string;
+    expect(title).not.toContain("\n");
+    // 1 行目を採用
+    expect(title).toContain("1 行目の要約");
+  });
+
+  it("truncates very long 概要 with ellipsis (UTF-8 byte safe)", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 1 } });
+    const octokit = { rest: { issues: { create } } } as any;
+    const longSummary = "あ".repeat(200);
+    const md = `## 概要\n${longSummary}\n\n## 主要な指摘\n### a:1 重大度: High\nx`;
+    await createPushIssue(octokit, makePushJob(), md, logger);
+    const title = create.mock.calls[0]![0].title as string;
+    // GitHub Issue タイトルの実用上限 (~80 字) を超えない
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith("…")).toBe(true);
+  });
+
+  it("falls back to old branch@sha title when both 概要 and findings are unparseable", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 1 } });
+    const octokit = { rest: { issues: { create } } } as any;
+    // 主要な指摘セクションはあるが本文に重大度しか書かれておらず、### file:line 見出しも 概要セクションも無い。
+    // hasSevereFindings は通り、かつ buildPushIssueTitle は両経路で fallback する。
+    const md = "## 主要な指摘\n重大度: Critical でログ出力\n";
+    await createPushIssue(octokit, makePushJob(), md, logger);
+    const title = create.mock.calls[0]![0].title as string;
+    expect(title).toMatch(/^\[codex-review\]/);
+    expect(title).toContain("main");
+    expect(title).toContain("abc1234"); // sha7
+  });
+
+  it("ignores 「特になし」 in 概要 and uses finding heading instead", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 1 } });
+    const octokit = { rest: { issues: { create } } } as any;
+    const md = [
+      "## 概要",
+      "特になし",
+      "",
+      "## 主要な指摘",
+      "### src/foo.ts:10 重大度: Critical",
+      "詳細",
+    ].join("\n");
+    await createPushIssue(octokit, makePushJob(), md, logger);
+    const title = create.mock.calls[0]![0].title as string;
+    expect(title).not.toContain("特になし");
+    expect(title).toContain("src/foo.ts:10");
   });
 
   it("does not throw on API error", async () => {
@@ -300,5 +383,164 @@ describe("createPushIssue", () => {
     const octokit = { rest: { issues: { create } } } as any;
     const md = "## 主要な指摘\n### file:1 重大度: High\n問題";
     await expect(createPushIssue(octokit, makePushJob(), md, logger)).resolves.toBeUndefined();
+  });
+});
+
+const makeFixJob = (): ReviewJob => ({
+  kind: "fix",
+  repo: "acme/app",
+  repoUrl: "https://github.com/acme/app",
+  title: "Issue #7 NPE [auto-fix]",
+  htmlUrl: "https://github.com/acme/app/issues/7",
+  sender: "ai-bot[bot]",
+  number: 7,
+  body: "クラッシュする",
+  action: "opened",
+  triggeredBy: "auto",
+});
+
+describe("createFixPullRequest", () => {
+  it("skips when job kind is not fix", async () => {
+    const create = vi.fn();
+    const addLabels = vi.fn();
+    const octokit = {
+      rest: { pulls: { create }, issues: { addLabels } },
+    } as any;
+    const result = await createFixPullRequest(octokit, makePrJob(), {
+      branch: "x/y",
+      baseBranch: "main",
+      body: "body",
+      label: "codex-fix",
+      logger,
+    });
+    expect(result).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("creates a PR with Closes #N footer and applies label", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 123, html_url: "https://x/123" } });
+    const addLabels = vi.fn().mockResolvedValue({});
+    const octokit = {
+      rest: { pulls: { create }, issues: { addLabels } },
+    } as any;
+    const result = await createFixPullRequest(octokit, makeFixJob(), {
+      branch: "codex-fix/issue-7-1234567",
+      baseBranch: "main",
+      body: "## 概要\nNPE 修正",
+      label: "codex-fix",
+      logger,
+    });
+    expect(result).toEqual({ number: 123, htmlUrl: "https://x/123" });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "acme",
+        repo: "app",
+        head: "codex-fix/issue-7-1234567",
+        base: "main",
+        draft: false,
+      }),
+    );
+    const body = create.mock.calls[0]![0].body as string;
+    // Closes #N が末尾に付与され、Issue 番号 7 を解決する
+    expect(body).toContain("Closes #7");
+    expect(body).toContain("NPE 修正");
+    expect(addLabels).toHaveBeenCalledWith({
+      owner: "acme",
+      repo: "app",
+      issue_number: 123,
+      labels: ["codex-fix"],
+    });
+  });
+
+  it("returns null and does not throw on PR API error", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("422"));
+    const octokit = { rest: { pulls: { create }, issues: { addLabels: vi.fn() } } } as any;
+    const result = await createFixPullRequest(octokit, makeFixJob(), {
+      branch: "codex-fix/issue-7-x",
+      baseBranch: "main",
+      body: "x",
+      label: "codex-fix",
+      logger,
+    });
+    expect(result).toBeNull();
+  });
+
+  it("still returns success when label API fails (best-effort label)", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 5, html_url: "https://x/5" } });
+    const addLabels = vi.fn().mockRejectedValue(new Error("forbidden"));
+    const octokit = { rest: { pulls: { create }, issues: { addLabels } } } as any;
+    const result = await createFixPullRequest(octokit, makeFixJob(), {
+      branch: "codex-fix/issue-7-x",
+      baseBranch: "main",
+      body: "x",
+      label: "codex-fix",
+      logger,
+    });
+    expect(result).toEqual({ number: 5, htmlUrl: "https://x/5" });
+  });
+
+  it("derives Closes footer from job.number even if body lacks it", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { number: 42, html_url: "https://x/42" } });
+    const octokit = { rest: { pulls: { create }, issues: { addLabels: vi.fn() } } } as any;
+    await createFixPullRequest(octokit, makeFixJob(), {
+      branch: "b",
+      baseBranch: "main",
+      body: "## 概要\nなし",
+      label: "codex-fix",
+      logger,
+    });
+    expect(create.mock.calls[0]![0].body).toMatch(/Closes #7/);
+  });
+});
+
+describe("postFixCommentOnIssue", () => {
+  it("skips when kind is not fix", async () => {
+    const createComment = vi.fn();
+    const octokit = { rest: { issues: { createComment } } } as any;
+    await postFixCommentOnIssue(octokit, makeIssueJob(), 99, "https://x/99", logger);
+    expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it("posts a comment linking to the new PR", async () => {
+    const createComment = vi.fn().mockResolvedValue({});
+    const octokit = { rest: { issues: { createComment } } } as any;
+    await postFixCommentOnIssue(octokit, makeFixJob(), 99, "https://x/99", logger);
+    expect(createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "acme",
+        repo: "app",
+        issue_number: 7,
+      }),
+    );
+    const body = createComment.mock.calls[0]![0].body as string;
+    expect(body).toContain("https://x/99");
+    expect(body).toContain("#99");
+  });
+
+  it("does not throw on API error", async () => {
+    const createComment = vi.fn().mockRejectedValue(new Error("boom"));
+    const octokit = { rest: { issues: { createComment } } } as any;
+    await expect(
+      postFixCommentOnIssue(octokit, makeFixJob(), 99, "https://x/99", logger),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("postFixNoChangeComment", () => {
+  it("posts a 'no changes' comment to the source Issue", async () => {
+    const createComment = vi.fn().mockResolvedValue({});
+    const octokit = { rest: { issues: { createComment } } } as any;
+    await postFixNoChangeComment(octokit, makeFixJob(), logger);
+    expect(createComment).toHaveBeenCalled();
+    const body = createComment.mock.calls[0]![0].body as string;
+    // 修正不能 / 変更なし 旨が含まれる
+    expect(body).toMatch(/変更|修正|生成/);
+  });
+
+  it("skips when kind is not fix", async () => {
+    const createComment = vi.fn();
+    const octokit = { rest: { issues: { createComment } } } as any;
+    await postFixNoChangeComment(octokit, makeIssueJob(), logger);
+    expect(createComment).not.toHaveBeenCalled();
   });
 });
