@@ -19,7 +19,7 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate \
  && apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates openssh-client python3 make g++ \
  && rm -rf /var/lib/apt/lists/* \
- && npm install -g @openai/codex
+ && npm install -g @openai/codex@latest
 
 WORKDIR /app
 
