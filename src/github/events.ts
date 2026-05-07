@@ -185,6 +185,7 @@ export function buildJobFromPayload(
         triggeredBy: "mention",
         commentId,
         commentUrl,
+        commentBody: body,
       };
     }
 
@@ -204,6 +205,7 @@ export function buildJobFromPayload(
         triggeredBy: "mention",
         commentId,
         commentUrl,
+        commentBody: body,
       };
     }
 
@@ -220,6 +222,7 @@ export function buildJobFromPayload(
       triggeredBy: "mention",
       commentId,
       commentUrl,
+      commentBody: body,
     };
   }
 

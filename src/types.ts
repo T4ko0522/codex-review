@@ -55,6 +55,8 @@ export const ReviewJobSchema = z.object({
   commentId: z.number().optional(),
   /** mention 経由レビュー時の起因コメント URL */
   commentUrl: z.string().optional(),
+  /** mention 経由レビュー時の起因コメント本文 */
+  commentBody: z.string().optional(),
 });
 
 /** キューへ積むレビュージョブ */
