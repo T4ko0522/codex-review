@@ -8,3 +8,4 @@ workspaces/
 *.log
 .DS_Store
 coverage/
+*.pem
