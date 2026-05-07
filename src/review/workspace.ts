@@ -24,6 +24,11 @@ export interface PrepareArgs {
 
 const REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
 const SHA_RE = /^[0-9a-fA-F]{40}$/;
+// Git の参照名規約 (man git-check-ref-format) を簡略化したもの:
+// - 連続 "/" や ".." は不可
+// - ASCII 制御文字 / スペース / 危険な記号 (~^:?*[\\) は不可
+// - "/" 始端終端、".lock" 終端、空文字は不可
+const BRANCH_RE = /^(?!.*\/\/)(?!.*\.\.)(?![./])(?!.*[/.]$)(?!.*\.lock$)[A-Za-z0-9._\-/]+$/;
 
 function assertRepo(value: string): void {
   if (!REPO_RE.test(value)) throw new Error(`invalid repo format: ${value}`);
@@ -31,6 +36,10 @@ function assertRepo(value: string): void {
 
 function assertSha(value: string): void {
   if (!SHA_RE.test(value)) throw new Error(`invalid SHA format: ${value}`);
+}
+
+function assertBranch(value: string): void {
+  if (!value || !BRANCH_RE.test(value)) throw new Error(`invalid branch name: ${value}`);
 }
 
 export function createIsolatedWorkspace(workspacesDir: string, logger: Logger): Workspace {
@@ -99,6 +108,67 @@ export async function cloneRepoAtDefaultBranch(args: CloneDefaultBranchArgs): Pr
     path: dir,
     cleanup: () => cleanupWorkspace(dir, logger),
   };
+}
+
+/**
+ * 既存 workspace で新ブランチを作成し HEAD から切り出す (auto-fix の起点)。
+ * 呼び出し前に `git config user.*` は不要 — commit 側で env で渡す。
+ */
+export async function checkoutNewBranch(workdir: string, branch: string): Promise<void> {
+  assertBranch(branch);
+  await execa("git", ["checkout", "-b", branch], { cwd: workdir, stdio: "pipe" });
+}
+
+/**
+ * `git status --porcelain` の出力で未コミット変更があるかを判定する。
+ * Codex が実際にファイルを書き換えたかの確認に使用。
+ */
+export async function hasUncommittedChanges(workdir: string): Promise<boolean> {
+  const { stdout } = await execa("git", ["status", "--porcelain"], {
+    cwd: workdir,
+    stdio: "pipe",
+  });
+  return stdout.trim().length > 0;
+}
+
+export interface CommitAllArgs {
+  message: string;
+  authorName: string;
+  authorEmail: string;
+}
+
+/**
+ * 全変更を 1 コミットにまとめる。author/committer を env 経由で指定するため、
+ * リポジトリのローカル git config を汚さない。
+ */
+export async function commitAll(workdir: string, args: CommitAllArgs): Promise<void> {
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: args.authorName,
+    GIT_AUTHOR_EMAIL: args.authorEmail,
+    GIT_COMMITTER_NAME: args.authorName,
+    GIT_COMMITTER_EMAIL: args.authorEmail,
+  };
+  await execa("git", ["add", "-A"], { cwd: workdir, stdio: "pipe", env });
+  await execa("git", ["commit", "-m", args.message], { cwd: workdir, stdio: "pipe", env });
+}
+
+/**
+ * 指定ブランチを origin に push する。token は GIT_CONFIG_* で注入し、URL 露出させない。
+ * `--set-upstream` を付与し、push 直後の状態を上流追跡できるようにする。
+ */
+export async function pushBranch(
+  workdir: string,
+  branch: string,
+  githubToken: string | undefined,
+): Promise<void> {
+  assertBranch(branch);
+  const env = { ...process.env, ...gitAuthEnv(githubToken) };
+  await execa("git", ["push", "--set-upstream", "origin", `${branch}:${branch}`], {
+    cwd: workdir,
+    stdio: "pipe",
+    env,
+  });
 }
 
 /**

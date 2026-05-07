@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { buildReviewPrompt, buildFollowUpPrompt } from "./prompt.ts";
+import { buildFixPrompt, buildReviewPrompt, buildFollowUpPrompt } from "./prompt.ts";
 import type { ReviewJob } from "../types.ts";
 import { randomBytes } from "node:crypto";
 
@@ -255,6 +255,55 @@ describe("buildFollowUpPrompt (edge cases)", () => {
     // 過去のユーザー入力も fence 内に包まれる
     const fenceBlock = prompt.match(/--- USER INPUT START [0-9A-F]{24} ---[\s\S]*?ユーザー入力/);
     expect(fenceBlock).not.toBeNull();
+  });
+});
+
+describe("buildFixPrompt", () => {
+  const fixJob: ReviewJob = {
+    kind: "fix",
+    repo: "acme/app",
+    repoUrl: "https://github.com/acme/app",
+    title: "Issue #7 NPE on startup [auto-fix]",
+    htmlUrl: "https://github.com/acme/app/issues/7",
+    sender: "ai-bot[bot]",
+    number: 7,
+    body: "クラッシュ\n再現:\n1. 起動",
+    action: "opened",
+    triggeredBy: "auto",
+  };
+
+  it("includes Issue context, body, and PR-summary instruction", () => {
+    const prompt = buildFixPrompt(fixJob);
+    expect(prompt).toContain("`acme/app`");
+    expect(prompt).toContain("#7");
+    expect(prompt).toContain("クラッシュ");
+    expect(prompt).toContain("PR 本文");
+    // 修正方針の指示が含まれる
+    expect(prompt).toContain("最小限");
+  });
+
+  it("omits body block when body is missing", () => {
+    const prompt = buildFixPrompt({ ...fixJob, body: undefined });
+    expect(prompt).toContain("(本文なし)");
+  });
+
+  it("fences body to prevent prompt injection", () => {
+    const prompt = buildFixPrompt(fixJob);
+    expect(prompt).toMatch(/--- USER INPUT START [0-9A-F]{24} ---/);
+    expect(prompt).toMatch(/--- USER INPUT END [0-9A-F]{24} ---/);
+  });
+
+  it("uses different fences across invocations", () => {
+    const a = buildFixPrompt(fixJob);
+    const b = buildFixPrompt(fixJob);
+    const re = /--- USER INPUT START ([0-9A-F]{24}) ---/;
+    expect(a.match(re)?.[1]).not.toBe(b.match(re)?.[1]);
+  });
+
+  it("explicitly forbids changes outside Issue scope", () => {
+    const prompt = buildFixPrompt(fixJob);
+    // 「無関係な変更を行わない」旨の指示が含まれる
+    expect(prompt).toMatch(/無関係|スコープ外/);
   });
 });
 

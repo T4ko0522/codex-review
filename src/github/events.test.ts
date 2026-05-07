@@ -364,3 +364,203 @@ describe("buildJobFromPayload - issue_comment", () => {
     expect(job?.triggeredBy).toBe("mention");
   });
 });
+
+describe("buildJobFromPayload - fix routing", () => {
+  const baseIssue = {
+    number: 7,
+    title: "Bug",
+    body: "steps",
+    html_url: "https://github.com/acme/widget/issues/7",
+    user: { login: "carol" },
+  };
+
+  it("routes opened issue with autoFixIssueLabel to a fix/auto job", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issues",
+        repository: "acme/widget",
+        sender: "ai-bot[bot]",
+        payload: {
+          action: "opened",
+          issue: { ...baseIssue, labels: [{ name: "codex-review" }, { name: "bug" }] },
+        },
+      },
+      { autoFixIssueLabel: "codex-review" },
+    );
+    expect(job?.kind).toBe("fix");
+    expect(job?.triggeredBy).toBe("auto");
+    expect(job?.number).toBe(7);
+    expect(job?.body).toBe("steps");
+    expect(job?.action).toBe("opened");
+  });
+
+  it("accepts string-shaped labels (some payloads use string arrays)", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issues",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: {
+          action: "opened",
+          issue: { ...baseIssue, labels: ["codex-review", "bug"] },
+        },
+      },
+      { autoFixIssueLabel: "codex-review" },
+    );
+    expect(job?.kind).toBe("fix");
+  });
+
+  it("falls back to plain issue review when label is absent", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issues",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: { action: "opened", issue: { ...baseIssue, labels: [{ name: "bug" }] } },
+      },
+      { autoFixIssueLabel: "codex-review" },
+    );
+    expect(job?.kind).toBe("issues");
+  });
+
+  it("does not auto-fix when autoFixIssueLabel option is absent", () => {
+    const job = buildJobFromPayload({
+      event: "issues",
+      repository: "acme/widget",
+      sender: "carol",
+      payload: {
+        action: "opened",
+        issue: { ...baseIssue, labels: [{ name: "codex-review" }] },
+      },
+    });
+    expect(job?.kind).toBe("issues");
+  });
+
+  it("only auto-fixes on opened action (not edited/reopened)", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issues",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: {
+          action: "edited",
+          issue: { ...baseIssue, labels: [{ name: "codex-review" }] },
+        },
+      },
+      { autoFixIssueLabel: "codex-review" },
+    );
+    expect(job?.kind).toBe("issues");
+  });
+
+  it("routes Issue comment with fixTrigger to fix/mention", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issue_comment",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: {
+          action: "created",
+          comment: {
+            id: 4242,
+            body: "@CodexRabbit[bot] fix please",
+            html_url: "https://github.com/acme/widget/issues/7#issuecomment-4242",
+            user: { login: "carol" },
+          },
+          issue: baseIssue,
+        },
+      },
+      {
+        mentionTriggers: ["@CodexRabbit[bot]"],
+        fixMentionTriggers: ["@CodexRabbit[bot] fix"],
+      },
+    );
+    expect(job?.kind).toBe("fix");
+    expect(job?.triggeredBy).toBe("mention");
+    expect(job?.number).toBe(7);
+    expect(job?.commentId).toBe(4242);
+  });
+
+  it("ignores fixTrigger on PR comments (PRs are not fix targets)", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issue_comment",
+        repository: "acme/widget",
+        sender: "bob",
+        payload: {
+          action: "created",
+          comment: {
+            id: 9999,
+            body: "@CodexRabbit[bot] fix it",
+            html_url: "https://github.com/acme/widget/pull/42#issuecomment-9999",
+            user: { login: "bob" },
+          },
+          issue: {
+            number: 42,
+            title: "Refactor auth",
+            body: "desc",
+            html_url: "https://github.com/acme/widget/pull/42",
+            pull_request: { url: "https://api.github.com/acme/widget/pulls/42" },
+          },
+        },
+      },
+      {
+        mentionTriggers: ["@CodexRabbit[bot]"],
+        fixMentionTriggers: ["@CodexRabbit[bot] fix"],
+      },
+    );
+    // fix トリガーは PR では無視。ただし review trigger 部分は含むので review として処理される。
+    expect(job?.kind).toBe("pull_request");
+    expect(job?.triggeredBy).toBe("mention");
+  });
+
+  it("prefers fixTrigger over reviewTrigger when both match (Issue)", () => {
+    // "@CodexRabbit[bot] fix" は "@CodexRabbit[bot]" を内包する。fix が優先されるべき。
+    const job = buildJobFromPayload(
+      {
+        event: "issue_comment",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: {
+          action: "created",
+          comment: {
+            id: 4242,
+            body: "@CodexRabbit[bot] fix this!",
+            html_url: "https://github.com/acme/widget/issues/7#issuecomment-4242",
+            user: { login: "carol" },
+          },
+          issue: baseIssue,
+        },
+      },
+      {
+        mentionTriggers: ["@CodexRabbit[bot]"],
+        fixMentionTriggers: ["@CodexRabbit[bot] fix"],
+      },
+    );
+    expect(job?.kind).toBe("fix");
+  });
+
+  it("ignores fixTrigger inside fenced code block", () => {
+    const job = buildJobFromPayload(
+      {
+        event: "issue_comment",
+        repository: "acme/widget",
+        sender: "carol",
+        payload: {
+          action: "created",
+          comment: {
+            id: 4242,
+            body: "look:\n```\n@CodexRabbit[bot] fix\n```\n",
+            html_url: "https://github.com/acme/widget/issues/7#issuecomment-4242",
+            user: { login: "carol" },
+          },
+          issue: baseIssue,
+        },
+      },
+      {
+        mentionTriggers: ["@CodexRabbit[bot]"],
+        fixMentionTriggers: ["@CodexRabbit[bot] fix"],
+      },
+    );
+    expect(job).toBeNull();
+  });
+});

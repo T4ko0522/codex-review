@@ -4,12 +4,16 @@ import { join } from "node:path";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+  checkoutNewBranch,
   cloneRepoAtDefaultBranch,
+  commitAll,
   createIsolatedWorkspace,
   filterDiff,
   getDiff,
   getFollowUpWorkspace,
+  hasUncommittedChanges,
   prepareWorkspace,
+  pushBranch,
 } from "./workspace.ts";
 import { execa } from "execa";
 
@@ -583,6 +587,99 @@ describe("getDiff", () => {
     expect(fetchCall[2].env.GIT_CONFIG_COUNT).toBe("1");
     expect(fetchCall[2].env.GIT_CONFIG_KEY_0).toBe("http.extraHeader");
     expect(diffCall[2].env.GIT_CONFIG_COUNT).toBe("1");
+  });
+});
+
+describe("checkoutNewBranch", () => {
+  beforeEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  it("runs git checkout -b <branch>", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "" } as any);
+    await checkoutNewBranch("/work", "codex-fix/issue-7-1234567");
+    const call = (vi.mocked(execa).mock.calls as any[])[0]!;
+    expect(call[0]).toBe("git");
+    expect(call[1]).toEqual(["checkout", "-b", "codex-fix/issue-7-1234567"]);
+    expect((call[2] as any).cwd).toBe("/work");
+  });
+
+  it("rejects branch names containing whitespace or refspec specials", async () => {
+    await expect(checkoutNewBranch("/work", "bad branch")).rejects.toThrow(/invalid branch/);
+    await expect(checkoutNewBranch("/work", "feat/..bad")).rejects.toThrow(/invalid branch/);
+    await expect(checkoutNewBranch("/work", "")).rejects.toThrow(/invalid branch/);
+  });
+});
+
+describe("hasUncommittedChanges", () => {
+  beforeEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  it("returns true when porcelain output is non-empty", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: " M src/foo.ts\n" } as any);
+    expect(await hasUncommittedChanges("/work")).toBe(true);
+  });
+
+  it("returns false when porcelain output is empty", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "" } as any);
+    expect(await hasUncommittedChanges("/work")).toBe(false);
+  });
+
+  it("treats whitespace-only output as no changes", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "   \n" } as any);
+    expect(await hasUncommittedChanges("/work")).toBe(false);
+  });
+});
+
+describe("commitAll", () => {
+  beforeEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  it("stages all and commits with author/email + message", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "" } as any);
+    await commitAll("/work", {
+      message: "fix: #7 thing",
+      authorName: "ai-bot",
+      authorEmail: "ai-bot@example.com",
+    });
+    const calls = vi.mocked(execa).mock.calls as any[];
+    expect(calls[0]![1]).toEqual(["add", "-A"]);
+    expect(calls[1]![1]).toEqual(["commit", "-m", "fix: #7 thing"]);
+    const opts = calls[1]![2] as any;
+    expect(opts.env.GIT_AUTHOR_NAME).toBe("ai-bot");
+    expect(opts.env.GIT_AUTHOR_EMAIL).toBe("ai-bot@example.com");
+    expect(opts.env.GIT_COMMITTER_NAME).toBe("ai-bot");
+    expect(opts.env.GIT_COMMITTER_EMAIL).toBe("ai-bot@example.com");
+  });
+});
+
+describe("pushBranch", () => {
+  beforeEach(() => {
+    vi.mocked(execa).mockReset();
+  });
+
+  it("pushes the branch to origin with auth env", async () => {
+    vi.mocked(execa).mockResolvedValue({ stdout: "" } as any);
+    await pushBranch("/work", "codex-fix/issue-7-1234567", "ghs_token");
+    const call = (vi.mocked(execa).mock.calls as any[])[0]!;
+    expect(call[0]).toBe("git");
+    expect(call[1]).toEqual([
+      "push",
+      "--set-upstream",
+      "origin",
+      "codex-fix/issue-7-1234567:codex-fix/issue-7-1234567",
+    ]);
+    const opts = call[2] as any;
+    expect(opts.cwd).toBe("/work");
+    expect(opts.env.GIT_CONFIG_COUNT).toBe("1");
+    expect(opts.env.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+    expect(opts.env.GIT_CONFIG_VALUE_0).not.toContain("ghs_token");
+  });
+
+  it("rejects invalid branch", async () => {
+    await expect(pushBranch("/work", "bad branch", "tok")).rejects.toThrow(/invalid branch/);
   });
 });
 
